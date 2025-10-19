@@ -1,5 +1,5 @@
 // src/pages/NewSale.jsx
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // <-- Import useCallback
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -34,19 +34,26 @@ export default function NewSale() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [saleId, setSaleId] = useState(null);
 
-  useEffect(() => {
-    fetchMedicines();
-  }, []);
-
-  const fetchMedicines = async () => {
-    const { data } = await supabase
+  // --- Wrap fetchMedicines in useCallback ---
+  const fetchMedicines = useCallback(async () => {
+    // console.log("Fetching medicines..."); // Optional: Add log for debugging
+    const { data, error } = await supabase
       .from('medicines')
       .select('id, product_name, batch_no, expiry_date, mrp');
-    if (data) {
+
+    if (error) {
+        console.error("Error fetching medicines:", error);
+        // Maybe show a snackbar error here
+    } else if (data) {
         data.sort((a, b) => a.product_name.localeCompare(b.product_name));
         setMedicines(data);
     }
-  };
+  }, []); // <-- Empty dependency array for useCallback as it doesn't depend on component state/props
+  // ------------------------------------------
+
+  useEffect(() => {
+    fetchMedicines();
+  }, [fetchMedicines]); // <-- Add fetchMedicines to dependency array
 
   const handleAddItem = () => {
     if (!selectedMedicine || quantity <= 0) return;
@@ -148,6 +155,7 @@ export default function NewSale() {
     setBillItems([]);
   };
 
+  // ... rest of the component remains the same ...
   return (
     <Layout>
       <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
@@ -164,12 +172,12 @@ export default function NewSale() {
           <Grid item xs={12} md={8}> {/* Search takes more space */}
             <Autocomplete
               options={medicines}
-              getOptionLabel={(option) => option.product_name || ''}
+              getOptionLabel={(option) => option.product_name || ''} // Ensure label is always a string
               value={selectedMedicine}
               onChange={(event, newValue) => {
                 setSelectedMedicine(newValue);
               }}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
+              isOptionEqualToValue={(option, value) => option.id === value.id} // Important for object comparison
               renderInput={(params) => (
                 <TextField {...params} label="Search Product" placeholder="Type medicine name..." />
               )}
@@ -194,19 +202,14 @@ export default function NewSale() {
                   </Grid>
                 </Box>
               )}
-              ListboxProps={{ style: { maxHeight: 300 } }}
+               ListboxProps={{ style: { maxHeight: 300 } }} // Limit dropdown height
             />
-
-            {/* --- Selected Item Details Box (Always Visible) --- */}
-            {/* Removed the 'selectedMedicine &&' condition */}
-            <Paper
+             <Paper
               variant="outlined"
               sx={{
                   p: 1.5,
                   mt: 1,
-                  // Use a subtle background or keep it plain
                   bgcolor: selectedMedicine ? 'action.hover' : 'background.paper',
-                  // Ensure minimum height so it doesn't collapse when empty
                   minHeight: '60px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -219,7 +222,7 @@ export default function NewSale() {
                         Selected: {selectedMedicine.product_name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      MRP: ₹{selectedMedicine.mrp.toFixed(2)} | Batch: {selectedMedicine.batch_no} | Expiry: {new Date(selectedMedicine.expiry_date).toLocaleDateString()}
+                       MRP: ₹{selectedMedicine.mrp.toFixed(2)} | Batch: {selectedMedicine.batch_no} | Expiry: {new Date(selectedMedicine.expiry_date).toLocaleDateString()}
                     </Typography>
                   </>
               ) : (
@@ -228,7 +231,6 @@ export default function NewSale() {
                   </Typography>
               )}
             </Paper>
-            {/* --- End Selected Item Details Box --- */}
 
           </Grid>
 
@@ -246,12 +248,12 @@ export default function NewSale() {
           <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'stretch' }}> {/* Add Button */}
             <Button
               variant="contained"
-              color="success"
+              color="success" // Changed color to green
               onClick={handleAddItem}
               disabled={!selectedMedicine}
               fullWidth
               startIcon={<AddIcon />}
-              sx={{ height: '100%' }}
+              sx={{ height: '100%' }} // Makes button same height as text field
             >
               Add Item
             </Button>
@@ -264,7 +266,7 @@ export default function NewSale() {
           <Grid item xs={12}>
             <Typography variant="h6" sx={{ mb: 1 }}>Current Bill</Typography>
             <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+              <Table size="small"> {/* Make table compact */}
                 <TableHead sx={{ bgcolor: 'grey.100' }}>
                   <TableRow>
                     <TableCell>Product Name</TableCell>
@@ -306,6 +308,7 @@ export default function NewSale() {
           {/* --- Row 3: Total & Generate Bill Button (only if items exist) --- */}
           {billItems.length > 0 && (
             <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+              {/* Grand Total on the left */}
               <Box>
                   <Typography variant="h5" component="span">
                     Grand Total:{' '}
@@ -314,6 +317,8 @@ export default function NewSale() {
                     ₹{grandTotal.toFixed(2)}
                   </Typography>
               </Box>
+
+              {/* Generate Bill Button on the right */}
               <Button
                 variant="contained"
                 size="large"
