@@ -37,7 +37,7 @@ export default function Layout({ children }) {
         <Toolbar>
           <MedicalServicesIcon sx={{ mr: 1 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            PharmaStock
+            Sri Sai Pharmacy
           </Typography>
 
           {/* Navigation for larger screens */}

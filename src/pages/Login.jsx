@@ -46,7 +46,7 @@ export default function Login() {
           <MedicalServicesIcon />
         </Avatar>
         <Typography component="h1" variant="h5">
-          PharmaStock
+          Sri Sai Pharmacy
         </Typography>
         <Typography component="p" color="text.secondary">
           Sign in to your account
