@@ -1,15 +1,14 @@
 // src/components/InvoiceModal.jsx
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Box,
-  Button,
+  Button as MuiButton,
   CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
-  IconButton,
-  Paper,
+  IconButton as MuiIconButton,
   Table,
   TableBody,
   TableCell,
@@ -18,247 +17,266 @@ import {
   TableRow,
   Typography,
   Divider,
-  Grid,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PrintIcon from '@mui/icons-material/Print';
-import MedicalServicesIcon from '@mui/icons-material/MedicalServices'; // Your app's icon
+
+// --- Calculation Helper ---
+const calculateItemAmounts = (mrp, gst, discount, quantity) => {
+  const mrpNum = parseFloat(mrp) || 0;
+  const gstNum = parseFloat(gst) || 0;
+  const discountNum = parseFloat(discount) || 0;
+  const qtyNum = parseInt(quantity, 10) || 0;
+
+  if (mrpNum <= 0 || qtyNum <= 0) {
+    return { subtotal: 0, gstAmount: 0, discountAmount: 0 };
+  }
+
+  const gstAmountTotal = (mrpNum * gstNum / 100) * qtyNum;
+  const discountAmountTotal = (mrpNum * discountNum / 100) * qtyNum;
+
+  const priceBeforeDiscount = mrpNum + (mrpNum * gstNum / 100);
+  const finalPricePerItem = priceBeforeDiscount - (mrpNum * discountNum / 100);
+  const subtotal = Math.max(0, finalPricePerItem * qtyNum);
+
+  return {
+    subtotal,
+    gstAmount: gstAmountTotal,
+    discountAmount: discountAmountTotal,
+  };
+};
+// -----------------------
 
 export default function InvoiceModal({ open, saleId, onClose }) {
   const [sale, setSale] = useState(null);
   const [saleItems, setSaleItems] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Helper to get total quantity/units
-  const totalUnits = saleItems.reduce((sum, item) => sum + item.quantity, 0);
+  const [medicineDetails, setMedicineDetails] = useState({});
 
   const fetchSaleData = useCallback(async () => {
     setLoading(true);
+    setMedicineDetails({});
 
+    // Fetch Sale Info
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
-      .select('*') // Selects all columns
+      .select('*')
       .eq('id', saleId)
       .maybeSingle();
 
     if (saleError || !saleData) {
       alert('Error loading sale data');
-      onClose();
+      onClose?.();
+      setLoading(false);
       return;
     }
 
+    // Fetch Sale Items
     const { data: itemsData, error: itemsError } = await supabase
       .from('sale_items')
       .select('*')
       .eq('sale_id', saleId);
 
-    if (itemsError) {
+    if (itemsError || !itemsData) {
       alert('Error loading sale items');
-      onClose();
+      onClose?.();
+      setLoading(false);
       return;
     }
 
     setSale(saleData);
-    setSaleItems(itemsData || []);
+    setSaleItems(itemsData);
+
+    // Fetch medicine details for those items
+    const medicineIds = [...new Set(itemsData.map(item => item.medicine_id).filter(Boolean))];
+    if (medicineIds.length > 0) {
+      const { data: medDetails, error: medError } = await supabase
+        .from('medicines')
+        .select('id, gst, discount')
+        .in('id', medicineIds);
+
+      if (medError) console.error('Error fetching medicine details:', medError);
+      else {
+        const detailsMap = medDetails.reduce((acc, med) => {
+          acc[med.id] = { gst: med.gst ?? 0, discount: med.discount ?? 0 };
+          return acc;
+        }, {});
+        setMedicineDetails(detailsMap);
+      }
+    }
+
     setLoading(false);
   }, [saleId, onClose]);
 
   useEffect(() => {
-    if (saleId) {
-      fetchSaleData();
-    }
+    if (saleId) fetchSaleData();
   }, [saleId, fetchSaleData]);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   const printStyles = `
     @media print {
-      body * {
-        visibility: hidden;
-      }
-      #invoice-content, #invoice-content * {
-        visibility: visible;
-      }
-      #invoice-content {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        padding: 20px;
-        margin: 0;
-      }
-      .no-print {
-        display: none !important;
-      }
-      /* Ensure table borders print */
-      table, th, td {
-        border-color: #000 !important;
-        color: #000 !important;
-      }
-      /* Hide dialog paper shadow/border */
-      .MuiDialog-paper {
-        box-shadow: none !important;
-        border: none !important;
-      }
+      body * { visibility: hidden; }
+      #invoice-content, #invoice-content * { visibility: visible; }
+      #invoice-content { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; margin: 0; }
+      .no-print { display: none !important; }
+      table, th, td { border-color: #000 !important; color: #000 !important; }
+      .MuiDialog-paper { box-shadow: none !important; border: none !important; }
     }
   `;
 
-  const formatDate = (dateString, options = {
-    year: '2-digit',
-    month: '2-digit',
-    day: '2-digit',
-  }) => {
+  const formatDate = (dateString, options = { year: '2-digit', month: '2-digit', day: '2-digit' }) => {
     if (!dateString) return '-';
     try {
-        const date = new Date(dateString);
-        if (isNaN(date)) return '-';
-        return date.toLocaleDateString('en-IN', options);
-    } catch (e) { return '-' }
+      const date = new Date(dateString);
+      if (isNaN(date)) return '-';
+      return date.toLocaleDateString('en-IN', options);
+    } catch {
+      return '-';
+    }
   };
 
   const formatExpiry = (dateString) => {
-     if (!dateString) return '-';
-      try {
-          const date = new Date(dateString);
-          if (isNaN(date)) return '-';
-          return `${date.getUTCMonth() + 1}/${date.getUTCFullYear()}`;
-      } catch (e) { return '-' }
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date)) return '-';
+      return `${date.getUTCMonth() + 1}/${date.getUTCFullYear()}`;
+    } catch {
+      return '-';
+    }
   };
 
+  // Calculate total discount
+  const totalDiscount = saleItems.reduce((sum, item) => {
+    const details = medicineDetails[item.medicine_id];
+    if (!details) return sum;
+    const discountAmt = (parseFloat(item.mrp || 0) * parseFloat(details.discount || 0) / 100) * parseInt(item.quantity || 0, 10);
+    return sum + discountAmt;
+  }, 0);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <style>{printStyles}</style>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="no-print">
+
+      {/* Header */}
+      <DialogTitle
+        sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        className="no-print"
+      >
         <Typography variant="h5">Invoice: {sale?.bill_number}</Typography>
         <Box>
-          <Button
-            variant="contained"
-            startIcon={<PrintIcon />}
-            onClick={handlePrint}
-            sx={{ mr: 2 }}
-          >
+          <MuiButton variant="contained" startIcon={<PrintIcon />} onClick={handlePrint} sx={{ mr: 2 }}>
             Print
-          </Button>
-          <IconButton onClick={onClose}>
+          </MuiButton>
+          <MuiIconButton onClick={onClose}>
             <CloseIcon />
-          </IconButton>
+          </MuiIconButton>
         </Box>
       </DialogTitle>
 
+      {/* Body */}
       <DialogContent>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 10 }}>
             <CircularProgress />
           </Box>
         ) : !sale ? (
-           <Typography>Sale data not found.</Typography>
+          <Typography>Sale data not found.</Typography>
         ) : (
           <Box id="invoice-content" sx={{ p: { xs: 1, md: 3 }, fontFamily: 'monospace', color: '#000' }}>
-
-            {/* Header */}
+            
+            {/* Pharmacy Header */}
             <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <MedicalServicesIcon color="primary" sx={{ fontSize: 40, mb: 1, display: 'block', margin: 'auto' }} />
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-                Srisai Pharmacy
-              </Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
-                123, Gandhi Road, Chennai - 600001
-              </Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
-                Phone: 044-2345789
-              </Typography>
-               <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
-                DL No: 86-20-AF/06/04/2017-1411A1 | GST: NOT-APPLIED
-              </Typography>
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>Srisai Pharmacy</Typography>
+              <Typography variant="body2">High School Road, Patamata, Vijayawada - 520010</Typography>
+              <Typography variant="body2">Andhra Pradesh</Typography>
+              <Typography variant="body2">Phone: +91 99634 03097</Typography>
+              <Typography variant="body2">D.L. No: 141268, 141269 | GST: APPLIED</Typography>
             </Box>
 
             <Divider sx={{ my: 1, borderColor: '#000' }} />
 
-            {/* Bill Info - Removed Doctor Line */}
-            <Grid container spacing={1} sx={{ fontSize: '0.9rem', mb: 1 }}>
-                <Grid item xs={8}>
-                    {/* Display Party/Customer info even if default */}
-                    <Typography variant="body2"><strong>Party:</strong> {sale.customer_name} ({sale.customer_phone})</Typography>
-                    {/* <Typography variant="body2"><strong>Doctor:</strong> {sale.doctor_name || 'N/A'}</Typography> */} {/* <-- REMOVED THIS LINE */}
-                </Grid>
-                 <Grid item xs={4} sx={{ textAlign: 'right' }}>
-                    <Typography variant="body2"><strong>Inv No:</strong> {sale.bill_number}</Typography>
-                    <Typography variant="body2"><strong>Inv Date:</strong> {formatDate(sale.sale_date)}</Typography>
-                    <Typography variant="body2"><strong>Bill Type:</strong> Cash</Typography>
-                </Grid>
-            </Grid>
+            {/* Bill Info - Only Phone */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', mb: 1 }}>
+              <Box>
+                <Typography variant="body2">
+                  <strong>Customer Phone:</strong>{' '}
+                  {sale.customer_phone && sale.customer_phone !== '-' ? sale.customer_phone : 'N/A'}
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="body2"><strong>Inv No:</strong> {sale.bill_number}</Typography>
+                <Typography variant="body2"><strong>Inv Date:</strong> {formatDate(sale.sale_date)}</Typography>
+              </Box>
+            </Box>
 
             <Divider sx={{ my: 1, borderColor: '#000', borderStyle: 'dashed' }} />
 
-
-            {/* Items Table (No changes needed here from previous version) */}
+            {/* Items Table */}
             <TableContainer>
               <Table size="small" sx={{ border: '1px solid #000' }}>
-                <TableHead sx={{ borderBottom: '1px solid #000' }}>
+                <TableHead>
                   <TableRow>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Mfg</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Product Name</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Sch</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Batch</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Exp</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Qty</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Rate</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Amount</TableCell>
-                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>MRP</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000' }}>Product</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000' }}>Batch</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000' }}>Exp</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000', textAlign: 'right' }}>Qty</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000', textAlign: 'right' }}>MRP</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000', textAlign: 'right' }}>GST</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000', textAlign: 'right' }}>Disc</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', border: '1px solid #000', textAlign: 'right' }}>Amount</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {saleItems.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>-</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{item.product_name}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>-</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{item.batch_no}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{formatExpiry(item.expiry_date)}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.quantity}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.mrp?.toFixed(2)}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.subtotal?.toFixed(2)}</TableCell>
-                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.mrp?.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {saleItems.map((item, i) => {
+                    const details = medicineDetails[item.medicine_id] || { gst: 0, discount: 0 };
+                    const amounts = calculateItemAmounts(item.mrp, details.gst, details.discount, item.quantity);
+                    return (
+                      <TableRow key={i}>
+                        <TableCell sx={{ border: '1px solid #000' }}>{item.product_name}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000' }}>{item.batch_no}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000' }}>{formatExpiry(item.expiry_date)}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000', textAlign: 'right' }}>{item.quantity}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000', textAlign: 'right' }}>{item.mrp?.toFixed(2)}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000', textAlign: 'right' }}>{amounts.gstAmount.toFixed(2)}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000', textAlign: 'right' }}>{amounts.discountAmount.toFixed(2)}</TableCell>
+                        <TableCell sx={{ border: '1px solid #000', textAlign: 'right', fontWeight: 'bold' }}>{amounts.subtotal.toFixed(2)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
 
             <Divider sx={{ my: 1, borderColor: '#000', borderStyle: 'dashed' }} />
 
-
-            {/* Footer Totals (No changes needed here) */}
-            <Grid container spacing={1} sx={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
-                <Grid item xs={6}>
-                    <Typography variant="body2">Items: {saleItems.length}</Typography>
-                    <Typography variant="body2">Units: {totalUnits}</Typography>
-                    <Typography variant="body2" sx={{ mt: 1 }}>*PLEASE GET YOUR MEDICINES CHECKED BY YOUR DOCTOR BEFORE USE*</Typography>
-                </Grid>
-                <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                    <Typography variant="body2">Disc: 0.00</Typography>
-                    <Typography variant="body2">Save Amt: 0.00</Typography>
-                     <Typography variant="body2" sx={{ mt: 0.5 }}>GrossAmt: {sale.grand_total?.toFixed(2)}</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', mt: 0.5 }}>NetAmt: {sale.grand_total?.toFixed(2)}</Typography>
-                </Grid>
-            </Grid>
+            {/* Totals */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+              <Box>
+                <Typography variant="body2">Items: {saleItems.length}</Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>*PLEASE CHECK YOUR MEDICINES BEFORE USE*</Typography>
+              </Box>
+              <Box sx={{ textAlign: 'right', p: 2, backgroundColor: 'primary.main', color: 'white', minWidth: 300 }}>
+                <Typography variant="body2">Amount Saved: ₹{totalDiscount.toFixed(2)}</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mt: 0.5 }}>
+                  Total Amount: ₹{sale.grand_total?.toFixed(2)}
+                </Typography>
+              </Box>
+            </Box>
 
             <Divider sx={{ my: 1, borderColor: '#000' }} />
 
-
-            {/* Footer (No changes needed here) */}
+            {/* Footer */}
             <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-                    Each item Subject to V/J/Tax/Disc/Distriibution only.<br/>
-                    Once Goods sold will not be taken back or exchanged.
-                </Typography>
-                 <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right' }}>
-                    For Srisai Pharmacy<br/><br/>
-                    (Signature)
-                </Typography>
+              <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                Each item subject to V/J/Tax/Disc/Distribution only.
+                <br />
+                Once goods sold will not be taken back or exchanged.
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right' }}>
+                For Srisai Pharmacy<br /><br />
+              </Typography>
             </Box>
           </Box>
         )}
