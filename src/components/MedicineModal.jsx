@@ -19,19 +19,19 @@ import {
   FormControl,
 } from '@mui/material';
 
-// Add new fields to initial state
+// Updated initial state
 const initialFormData = {
   product_name: '',
   shop_name: '',
   batch_no: '',
   no_of_items: '',
   drug_type: 'tablet',
-  mfg_date: '', // <-- Added Manufacturing Date
+  // mfg_date: '', // <-- Removed
   expiry_date: '',
   purchase_rate: '',
   gst: '',
   mrp: '',
-  discount: '0.00', // <-- Added Discount, default to 0.00
+  discount: '', // <-- Changed default from '0.00' to empty string ''
   stock: '0',
 };
 
@@ -46,20 +46,20 @@ export default function MedicineModal({ open, medicine, onClose }) {
 
   useEffect(() => {
     if (medicine) {
-      // Populate form including new fields
+      // Populate form without mfg_date, handle null discount
       setFormData({
         product_name: medicine.product_name,
         shop_name: medicine.shop_name,
         batch_no: medicine.batch_no,
         no_of_items: medicine.no_of_items,
         drug_type: drugTypes.includes(medicine.drug_type) ? medicine.drug_type : 'tablet',
-        mfg_date: medicine.mfg_date || '', // <-- Populate mfg_date (handle null)
-        expiry_date: medicine.expiry_date,
-        purchase_rate: medicine.purchase_rate.toString(),
-        gst: medicine.gst.toString(),
-        mrp: medicine.mrp.toString(),
-        discount: medicine.discount?.toString() || '0.00', // <-- Populate discount (handle null)
-        stock: medicine.stock.toString(),
+        // mfg_date: medicine.mfg_date || '', // <-- Removed
+        expiry_date: medicine.expiry_date || '', // Handle null expiry date
+        purchase_rate: medicine.purchase_rate?.toString() || '', // Handle null
+        gst: medicine.gst?.toString() || '', // Handle null
+        mrp: medicine.mrp?.toString() || '', // Handle null
+        discount: medicine.discount?.toString() || '', // <-- Populate discount, default to '' if null
+        stock: medicine.stock?.toString() || '0', // Handle null
       });
     } else {
       setFormData(initialFormData);
@@ -71,12 +71,10 @@ export default function MedicineModal({ open, medicine, onClose }) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Separate handlers for dates remain the same
+  // Only one date handler needed now
   const handleDateChange = (e) => {
-    const { name, value } = e.target; // Get name to handle both dates
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, expiry_date: e.target.value }));
   };
-
 
   const handleSelectChange = (e) => {
     setFormData((prev) => ({ ...prev, drug_type: e.target.value }));
@@ -88,7 +86,7 @@ export default function MedicineModal({ open, medicine, onClose }) {
     setError('');
     setLoading(true);
 
-    // Prepare data including new fields
+    // Prepare data without mfg_date, handle potentially empty discount
     const data = {
       user_id: user?.id,
       product_name: formData.product_name,
@@ -96,19 +94,21 @@ export default function MedicineModal({ open, medicine, onClose }) {
       batch_no: formData.batch_no,
       no_of_items: formData.no_of_items,
       drug_type: formData.drug_type,
-      mfg_date: formData.mfg_date || null, // <-- Send mfg_date (allow null)
-      expiry_date: formData.expiry_date,
-      purchase_rate: parseFloat(formData.purchase_rate),
-      gst: parseFloat(formData.gst),
-      mrp: parseFloat(formData.mrp),
-      discount: parseFloat(formData.discount) || 0.00, // <-- Send discount (default to 0 if empty/invalid)
-      stock: parseInt(formData.stock, 10),
+      // mfg_date: formData.mfg_date || null, // <-- Removed
+      expiry_date: formData.expiry_date || null, // Allow null expiry date if needed
+      purchase_rate: parseFloat(formData.purchase_rate) || 0, // Default to 0 if empty/invalid
+      gst: parseFloat(formData.gst) || 0, // Default to 0 if empty/invalid
+      mrp: parseFloat(formData.mrp) || 0, // Default to 0 if empty/invalid
+      // Send discount as null if the input is empty, otherwise parse float (default to null if invalid)
+      discount: formData.discount === '' ? null : (parseFloat(formData.discount) || null),
+      stock: parseInt(formData.stock, 10) || 0, // Default to 0 if empty/invalid
     };
 
-    // Make sure mfg_date is valid or null before sending
-    if (isNaN(new Date(data.mfg_date))) {
-        data.mfg_date = null;
+     // Ensure expiry_date is valid or null before sending
+    if (data.expiry_date && isNaN(new Date(data.expiry_date))) {
+        data.expiry_date = null;
     }
+
 
     let result;
     if (medicine) {
@@ -137,7 +137,6 @@ export default function MedicineModal({ open, medicine, onClose }) {
       <Box component="form" onSubmit={handleSubmit}>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {/* Increased spacing */}
           <Grid container spacing={3} sx={{ mt: 0 }}>
             {/* Row 1 */}
             <Grid item xs={12} sm={6}>
@@ -162,35 +161,21 @@ export default function MedicineModal({ open, medicine, onClose }) {
               />
             </Grid>
 
-            {/* Row 3 - Dates */}
+            {/* Row 3 - Expiry Date Only */}
              <Grid item xs={12} sm={6}>
-               <TextField
-                name="mfg_date" // <-- Field for Manufacturing Date
-                label="Manufacturing Date"
-                type="date"
-                value={formData.mfg_date}
-                onChange={handleDateChange} // Use same handler
-                fullWidth
-                required // Make required if necessary
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
                <TextField
                 name="expiry_date"
                 label="Expiry Date"
                 type="date"
                 value={formData.expiry_date}
-                onChange={handleDateChange} // Use same handler
+                onChange={handleDateChange} // Use date handler
                 fullWidth
-                required
+                required // Keep required? Or make optional?
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-
-
-             {/* Row 4 - Type and Stock */}
-             <Grid item xs={12} sm={6}>
+            {/* Removed Mfg Date Field */}
+            <Grid item xs={12} sm={6}> {/* Type */}
                 <FormControl fullWidth required>
                     <InputLabel id="drug-type-select-label">Drug Type</InputLabel>
                     <Select
@@ -209,38 +194,37 @@ export default function MedicineModal({ open, medicine, onClose }) {
                     </Select>
                 </FormControl>
             </Grid>
+
+
+             {/* Row 4 - Stock & Purchase Rate */}
             <Grid item xs={12} sm={6}>
               <TextField name="stock" label="Stock (Quantity)" type="number" value={formData.stock} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} />
             </Grid>
-
-
-             {/* Row 5 - Pricing */}
-            <Grid item xs={12} sm={4}> {/* Adjusted grid size */}
+            <Grid item xs={12} sm={6}>
               <TextField name="purchase_rate" label="Purchase Rate" type="number" value={formData.purchase_rate} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
             </Grid>
-             <Grid item xs={12} sm={4}> {/* Adjusted grid size */}
+
+             {/* Row 5 - Pricing */}
+            <Grid item xs={12} sm={4}>
               <TextField name="mrp" label="MRP" type="number" value={formData.mrp} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
             </Grid>
-            <Grid item xs={12} sm={4}> {/* Adjusted grid size */}
+            <Grid item xs={12} sm={4}>
               <TextField name="gst" label="GST (%)" type="number" value={formData.gst} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
             </Grid>
-
-             {/* Row 6 - Discount */}
             <Grid item xs={12} sm={4}>
                <TextField
-                 name="discount" // <-- Field for Discount
-                 label="Discount (%)"
+                 name="discount"
+                 label="Discount (%)" // Label remains same
                  type="number"
-                 value={formData.discount}
+                 value={formData.discount} // Value reads from state (now defaults to '')
                  onChange={handleChange}
                  fullWidth
-                 required // Make required if necessary
-                 inputProps={{ step: "0.01", min: "0.00" }} // Allow decimals for percent
+                 // required // Make it NOT required
+                 InputProps={{ // Keep input props for decimals/min
+                     inputProps: { step: "0.01", min: "0.00" }
+                 }}
                />
             </Grid>
-             {/* Add empty Grid items if needed to fill the row */}
-             <Grid item sm={8} />
-
 
           </Grid>
         </DialogContent>

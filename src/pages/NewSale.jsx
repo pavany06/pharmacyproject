@@ -1,5 +1,5 @@
 // src/pages/NewSale.jsx
-import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -18,8 +18,8 @@ import {
   TextField,
   Typography,
   Divider,
-  Snackbar, // <-- Import Snackbar
-  Alert,    // <-- Import Alert
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -29,48 +29,40 @@ import InvoiceModal from '../components/InvoiceModal';
 
 export default function NewSale() {
   const { user } = useAuth();
-  const [medicines, setMedicines] = useState([]); // Will now include stock
+  const [medicines, setMedicines] = useState([]);
   const [selectedMedicine, setSelectedMedicine] = useState(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(''); // <-- Changed default from 1 to ''
   const [billItems, setBillItems] = useState([]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [saleId, setSaleId] = useState(null);
-
-  // --- State for Snackbar ---
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('info'); // 'success' | 'error' | 'warning' | 'info'
-  // -------------------------
+  const [snackbarSeverity, setSnackbarSeverity] = useState('info');
 
-  // --- Wrap fetchMedicines in useCallback ---
   const fetchMedicines = useCallback(async () => {
-    console.log("Fetching medicines..."); // Log start
-    // --- Include 'stock' in the select query ---
+    console.log("Fetching medicines...");
     const { data, error } = await supabase
       .from('medicines')
-      .select('id, product_name, batch_no, expiry_date, mrp, stock'); // <-- Added stock
-    // ------------------------------------------
+      .select('id, product_name, batch_no, expiry_date, mrp, stock');
 
     if(error){
       console.error("Error fetching medicines:", error);
-      showSnackbar("Error fetching medicine list.", "error"); // Show error notification
+      showSnackbar("Error fetching medicine list.", "error");
     } else if (data) {
         data.sort((a, b) => a.product_name.localeCompare(b.product_name));
         setMedicines(data);
-        console.log("Medicines fetched:", data.length); // Log success
+        console.log("Medicines fetched:", data.length);
     } else {
         console.warn("No medicine data returned.");
-        setMedicines([]); // Ensure it's an empty array if no data
+        setMedicines([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // <-- Empty dependency array for useCallback
-  // ------------------------------------------
+  }, []);
 
   useEffect(() => {
     fetchMedicines();
-  }, [fetchMedicines]); // <-- Add fetchMedicines dependency
+  }, [fetchMedicines]);
 
-  // --- Snackbar Helper ---
   const showSnackbar = (message, severity = 'info') => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
@@ -83,30 +75,30 @@ export default function NewSale() {
     }
     setSnackbarOpen(false);
   };
-  // ----------------------
 
 
   const handleAddItem = () => {
-    if (!selectedMedicine || quantity <= 0) {
-        showSnackbar("Please select a medicine and enter a valid quantity.", "warning");
+    // Ensure quantity is entered and is a positive number
+    const qtyToAdd = parseInt(quantity, 10);
+    if (!selectedMedicine || isNaN(qtyToAdd) || qtyToAdd <= 0) {
+        showSnackbar("Please select a medicine and enter a valid positive quantity.", "warning");
         return;
     };
 
-    // --- Stock Check Logic ---
-    const availableStock = selectedMedicine.stock ?? 0; // Use ?? to handle null/undefined stock
+
+    const availableStock = selectedMedicine.stock ?? 0;
     const quantityAlreadyInBill = billItems
         .filter(item => item.medicine_id === selectedMedicine.id)
         .reduce((sum, item) => sum + item.quantity, 0);
 
-    const requestedTotalQuantity = quantityAlreadyInBill + quantity;
+    const requestedTotalQuantity = quantityAlreadyInBill + qtyToAdd; // Use parsed quantity
 
-    console.log(`Adding Item: ${selectedMedicine.product_name}, Qty: ${quantity}, In Bill: ${quantityAlreadyInBill}, Available: ${availableStock}`); // Debug log
+    console.log(`Adding Item: ${selectedMedicine.product_name}, Qty: ${qtyToAdd}, In Bill: ${quantityAlreadyInBill}, Available: ${availableStock}`);
 
     if (requestedTotalQuantity > availableStock) {
-        showSnackbar(`Cannot add ${quantity}. Only ${availableStock - quantityAlreadyInBill} of ${selectedMedicine.product_name} available in stock.`, "error");
-        return; // Stop the function here
+        showSnackbar(`Cannot add ${qtyToAdd}. Only ${availableStock - quantityAlreadyInBill} of ${selectedMedicine.product_name} available in stock.`, "error");
+        return;
     }
-    // --- End Stock Check ---
 
 
     const existingItem = billItems.find(
@@ -119,8 +111,8 @@ export default function NewSale() {
           item.medicine_id === selectedMedicine.id
             ? {
                 ...item,
-                quantity: item.quantity + quantity, // Already checked stock allows this
-                subtotal: (item.quantity + quantity) * item.mrp,
+                quantity: item.quantity + qtyToAdd, // Use parsed quantity
+                subtotal: (item.quantity + qtyToAdd) * item.mrp,
               }
             : item
         )
@@ -132,14 +124,14 @@ export default function NewSale() {
         batch_no: selectedMedicine.batch_no,
         expiry_date: selectedMedicine.expiry_date,
         mrp: selectedMedicine.mrp,
-        quantity: quantity,
-        subtotal: selectedMedicine.mrp * quantity,
+        quantity: qtyToAdd, // Use parsed quantity
+        subtotal: selectedMedicine.mrp * qtyToAdd,
       };
       setBillItems([...billItems, newItem]);
     }
 
     setSelectedMedicine(null);
-    setQuantity(1);
+    setQuantity(''); // Reset quantity to empty string
   };
 
   const handleRemoveItem = (index) => {
@@ -148,11 +140,9 @@ export default function NewSale() {
 
   const grandTotal = billItems.reduce((total, item) => total + item.subtotal, 0);
 
-  // --- Stock Update Function ---
   const updateStockLevels = async (itemsSold) => {
       console.log("Attempting to update stock for items:", itemsSold);
       const updates = itemsSold.map(async (item) => {
-          // Fetch the current stock again just before updating (more robust)
           const { data: currentMedicineData, error: fetchError } = await supabase
               .from('medicines')
               .select('stock')
@@ -161,10 +151,10 @@ export default function NewSale() {
 
           if (fetchError || !currentMedicineData) {
               console.error(`Error fetching current stock for ${item.product_name} (ID: ${item.medicine_id}):`, fetchError);
-              throw new Error(`Could not verify stock for ${item.product_name}. Update failed.`); // Throw error to potentially stop others
+              throw new Error(`Could not verify stock for ${item.product_name}. Update failed.`);
           }
 
-          const currentStock = currentMedicineData.stock ?? 0; // Handle null stock
+          const currentStock = currentMedicineData.stock ?? 0;
           const newStock = currentStock - item.quantity;
 
           if (newStock < 0) {
@@ -173,29 +163,27 @@ export default function NewSale() {
 
           const { error: updateError } = await supabase
               .from('medicines')
-              .update({ stock: Math.max(0, newStock) }) // Ensure stock doesn't go negative
+              .update({ stock: Math.max(0, newStock) })
               .eq('id', item.medicine_id);
 
           if (updateError) {
               console.error(`Error updating stock for ${item.product_name} (ID: ${item.medicine_id}):`, updateError);
-              throw new Error(`Failed to update stock for ${item.product_name}.`); // Throw error
+              throw new Error(`Failed to update stock for ${item.product_name}.`);
           }
            console.log(`Successfully updated stock for ${item.product_name} to ${Math.max(0, newStock)}`);
-          return true; // Indicate success for this item
+          return true;
       });
 
-      // Wait for all update promises to settle
       try {
           await Promise.all(updates);
           console.log("All stock levels updated successfully.");
-          return true; // Overall success
+          return true;
       } catch (error) {
           console.error("One or more stock updates failed:", error);
           showSnackbar(`Error updating stock levels: ${error.message}`, "error");
-          return false; // Indicate overall failure
+          return false;
       }
   };
-  // ----------------------------
 
 
   const handleGenerateBill = async () => {
@@ -204,22 +192,19 @@ export default function NewSale() {
       return;
     }
 
-    // --- Re-verify Stock Before Generating Bill (Optional but Safer) ---
-    // This adds an extra check right before committing the sale
     let stockSufficient = true;
     for (const item of billItems) {
         const med = medicines.find(m => m.id === item.medicine_id);
         if (!med || (med.stock ?? 0) < item.quantity) {
              showSnackbar(`Stock changed for ${item.product_name}. Only ${med?.stock ?? 0} available. Please remove item or reduce quantity.`, "error");
              stockSufficient = false;
-             break; // Stop checking
+             break;
         }
     }
     if (!stockSufficient) {
-        fetchMedicines(); // Refresh list to show updated stock
-        return; // Prevent bill generation
+        fetchMedicines();
+        return;
     }
-    // --- End Re-verification ---
 
 
     const billNumber = `BILL-${Date.now()}`;
@@ -261,24 +246,18 @@ export default function NewSale() {
 
     if (itemsError) {
       showSnackbar(`Error saving sale items: ${itemsError.message}`, "error");
-      // Optional: Delete the 'sales' record if items fail
-      // await supabase.from('sales').delete().eq('id', saleData.id);
       return;
     }
 
-    // --- 3. Update Stock Levels ---
+    // 3. Update Stock Levels
     const stockUpdateSuccess = await updateStockLevels(billItems);
-    // ----------------------------
 
     if (stockUpdateSuccess) {
-        showSnackbar("Sale recorded and stock updated successfully!", "success"); // Success message
+        showSnackbar("Sale recorded and stock updated successfully!", "success");
         setSaleId(saleData.id);
         setShowInvoice(true);
     } else {
          showSnackbar("Sale recorded, but failed to update stock levels automatically. Please check inventory manually.", "error");
-         // Decide if you still want to show the invoice
-         // setSaleId(saleData.id);
-         // setShowInvoice(true); // Maybe still show invoice but with a stronger warning?
     }
   };
 
@@ -286,7 +265,7 @@ export default function NewSale() {
     setShowInvoice(false);
     setSaleId(null);
     setBillItems([]);
-    fetchMedicines(); // Fetch medicines again to reflect updated stock
+    fetchMedicines();
   };
 
   return (
@@ -310,12 +289,11 @@ export default function NewSale() {
               onChange={(event, newValue) => {
                 setSelectedMedicine(newValue);
               }}
-              isOptionEqualToValue={(option, value) => option?.id === value?.id} // Safer check
+              isOptionEqualToValue={(option, value) => option?.id === value?.id}
               renderInput={(params) => (
                 <TextField {...params} label="Search Product" placeholder="Type medicine name..." />
               )}
               renderOption={(props, option) => (
-                // Use React.Fragment to avoid invalid DOM nesting if needed, ensure key is on top element
                 <Box component="li" {...props} key={option.id}>
                   <Grid container spacing={1} sx={{ width: '100%' }}>
                      <Grid item xs={5}>
@@ -324,7 +302,7 @@ export default function NewSale() {
                       </Typography>
                     </Grid>
                      <Grid item xs={2}>
-                      <Typography variant="body2" color={option.stock > 0 ? 'text.secondary' : 'error.main'}> {/* Highlight zero stock */}
+                      <Typography variant="body2" color={option.stock > 0 ? 'text.secondary' : 'error.main'}>
                         Stock: {option.stock ?? 'N/A'}
                       </Typography>
                     </Grid>
@@ -342,7 +320,6 @@ export default function NewSale() {
                 </Box>
               )}
               ListboxProps={{ style: { maxHeight: 300 } }}
-              // Disable options with zero stock
               getOptionDisabled={(option) => (option.stock ?? 0) <= 0}
             />
             <Paper
@@ -378,10 +355,12 @@ export default function NewSale() {
             <TextField
               label="Qty"
               type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-              InputProps={{ inputProps: { min: 1 } }}
+              value={quantity} // Reads from state (now defaults to '')
+              onChange={(e) => setQuantity(e.target.value)} // Update state directly
+              // Removed default value, but keep min attribute
+              InputProps={{ inputProps: { min: "1" } }}
               fullWidth
+              required // Add required to ensure user enters a value
             />
           </Grid>
 
@@ -390,7 +369,7 @@ export default function NewSale() {
               variant="contained"
               color="success"
               onClick={handleAddItem}
-              disabled={!selectedMedicine || (selectedMedicine.stock ?? 0) <= 0} // Also disable if selected item has 0 stock
+              disabled={!selectedMedicine || (selectedMedicine.stock ?? 0) <= 0}
               fullWidth
               startIcon={<AddIcon />}
               sx={{ height: '100%' }}
@@ -472,14 +451,12 @@ export default function NewSale() {
       {/* --- Snackbar for Notifications --- */}
        <Snackbar
         open={snackbarOpen}
-        autoHideDuration={6000} // 6 seconds
+        autoHideDuration={6000}
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        {/* Important: Put key here if Snackbar content changes, or wrap Alert */}
-        {/* Using Alert directly is fine if message/severity updates */}
         <Alert
-          onClose={handleSnackbarClose} // Adds close button to Alert
+          onClose={handleSnackbarClose}
           severity={snackbarSeverity}
           variant="filled"
           sx={{ width: '100%' }}
@@ -487,8 +464,6 @@ export default function NewSale() {
           {snackbarMessage}
         </Alert>
       </Snackbar>
-      {/* ------------------------------- */}
-
 
       {showInvoice && saleId && (
         <InvoiceModal

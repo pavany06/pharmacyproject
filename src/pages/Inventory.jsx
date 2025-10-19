@@ -34,11 +34,11 @@ import MedicineModal from '../components/MedicineModal';
 const formatDate = (dateString) => {
   if (!dateString) return '-';
   try {
-      const parts = dateString.split('-'); // Assumes YYYY-MM-DD
+      const parts = dateString.split('-');
       if (parts.length !== 3) return '-';
       const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
       if (isNaN(date)) return '-';
-      return date.toLocaleDateString('en-GB'); // Use dd/mm/yyyy format
+      return date.toLocaleDateString('en-GB');
   } catch (e) {
       return '-';
   }
@@ -53,7 +53,7 @@ export default function Inventory() {
   const [editingMedicine, setEditingMedicine] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expiringMedicines, setExpiringMedicines] = useState([]);
-  const [showExpiryAlert, setShowExpiryAlert] = useState(true); // <-- State to control alert visibility
+  const [showExpiryAlert, setShowExpiryAlert] = useState(true);
 
   const checkExpiryDates = (medicineList) => {
     const today = new Date();
@@ -78,7 +78,6 @@ export default function Inventory() {
     });
 
     setExpiringMedicines(expiring);
-    // If expiring medicines are found, make sure the alert is initially visible
     if (expiring.length > 0) {
         setShowExpiryAlert(true);
     }
@@ -105,7 +104,7 @@ export default function Inventory() {
   const fetchMedicines = async () => {
     setLoading(true);
     setExpiringMedicines([]);
-    setShowExpiryAlert(false); // Hide alert initially on fetch
+    setShowExpiryAlert(false);
     const { data, error } = await supabase
       .from('medicines')
       .select('*')
@@ -114,7 +113,7 @@ export default function Inventory() {
     if (!error && data) {
       setMedicines(data);
       setFilteredMedicines(data);
-      checkExpiryDates(data); // Check expiry and potentially set showExpiryAlert to true
+      checkExpiryDates(data);
     } else if (error) {
        console.error("Error fetching medicines:", error);
        alert("Failed to load inventory.");
@@ -152,21 +151,18 @@ export default function Inventory() {
     setIsModalOpen(true);
   };
 
-  // Function to handle closing the alert
   const handleCloseAlert = () => {
       setShowExpiryAlert(false);
   };
 
   return (
     <Layout>
-      {/* --- Expiry Alert Section (Conditionally Rendered) --- */}
-      {/* Render only if there are expiring items AND the alert hasn't been closed */}
       {expiringMedicines.length > 0 && showExpiryAlert && (
         <Alert
             severity="warning"
             icon={<WarningAmberIcon fontSize="inherit" />}
             sx={{ mb: 3 }}
-            onClose={handleCloseAlert} // <-- Add onClose handler
+            onClose={handleCloseAlert}
         >
           <AlertTitle>Expiry Warning</AlertTitle>
           The following medicines are expiring within the next month:
@@ -182,7 +178,6 @@ export default function Inventory() {
           </List>
         </Alert>
       )}
-      {/* ----------------------------- */}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
@@ -225,19 +220,20 @@ export default function Inventory() {
           </Typography>
         ) : (
           <Table sx={{
-            minWidth: 1200,
+            minWidth: 1100, // Adjusted minWidth slightly
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
               padding: '8px 10px',
               whiteSpace: 'nowrap',
             }
           }} size="small">
-             <TableHead sx={{ bgcolor: 'grey.100' }}>
+            <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
+                {/* --- Updated Headers (Mfg Date removed) --- */}
                 <TableCell>Product Name</TableCell>
                 <TableCell>Shop Name</TableCell>
                 <TableCell>Batch No</TableCell>
-                <TableCell>Mfg Date</TableCell>
+                {/* <TableCell>Mfg Date</TableCell> */} {/* Removed */}
                 <TableCell>Expiry Date</TableCell>
                 <TableCell>No of Items</TableCell>
                 <TableCell>Drug Type</TableCell>
@@ -247,17 +243,19 @@ export default function Inventory() {
                 <TableCell>MRP</TableCell>
                 <TableCell>Discount (%)</TableCell>
                 <TableCell align="right">Actions</TableCell>
+                {/* ------------------------------------------- */}
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredMedicines.map((medicine) => (
                 <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                  {/* --- Updated Data Cells (Mfg Date removed) --- */}
                   <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
                     {medicine.product_name}
                   </TableCell>
                   <TableCell>{medicine.shop_name}</TableCell>
                   <TableCell>{medicine.batch_no}</TableCell>
-                  <TableCell>{formatDate(medicine.mfg_date)}</TableCell>
+                  {/* <TableCell>{formatDate(medicine.mfg_date)}</TableCell> */} {/* Removed */}
                   <TableCell sx={{
                       backgroundColor: expiringMedicines.some(exp => exp.id === medicine.id)
                         ? 'warning.light'
@@ -274,7 +272,9 @@ export default function Inventory() {
                   <TableCell>₹{medicine.purchase_rate?.toFixed(2)}</TableCell>
                   <TableCell>{medicine.gst?.toFixed(2)}%</TableCell>
                   <TableCell>₹{medicine.mrp?.toFixed(2)}</TableCell>
-                  <TableCell>{medicine.discount?.toFixed(2)}%</TableCell>
+                   {/* Display discount or '-' if null/zero */}
+                  <TableCell>{medicine.discount ? `${medicine.discount.toFixed(2)}%` : '-'}</TableCell>
+                  {/* --------------------------------------------- */}
                   <TableCell align="right">
                     <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)}>
                       <EditIcon fontSize="small"/>
