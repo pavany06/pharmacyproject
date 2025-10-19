@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
+  Alert,
+  AlertTitle,
   Box,
   Button,
   CircularProgress,
@@ -16,20 +18,30 @@ import {
   TableRow,
   TextField,
   Typography,
+  List,
+  ListItem,
+  ListItemText,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Layout from '../components/Layout';
 import MedicineModal from '../components/MedicineModal';
 
 // Helper function to format dates or return '-' if invalid/null
 const formatDate = (dateString) => {
   if (!dateString) return '-';
-  const date = new Date(dateString);
-  if (isNaN(date)) return '-';
-  return date.toLocaleDateString('en-GB'); // Use dd/mm/yyyy format
+  try {
+      const parts = dateString.split('-'); // Assumes YYYY-MM-DD
+      if (parts.length !== 3) return '-';
+      const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+      if (isNaN(date)) return '-';
+      return date.toLocaleDateString('en-GB'); // Use dd/mm/yyyy format
+  } catch (e) {
+      return '-';
+  }
 };
 
 
@@ -40,13 +52,45 @@ export default function Inventory() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expiringMedicines, setExpiringMedicines] = useState([]);
+  const [showExpiryAlert, setShowExpiryAlert] = useState(true); // <-- State to control alert visibility
+
+  const checkExpiryDates = (medicineList) => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const oneMonthFromNow = new Date(today);
+    oneMonthFromNow.setUTCMonth(oneMonthFromNow.getUTCMonth() + 1);
+
+    const expiring = medicineList.filter(med => {
+      if (!med.expiry_date) return false;
+      try {
+          const parts = med.expiry_date.split('-');
+          if (parts.length !== 3) return false;
+          const expiryDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+           expiryDate.setUTCHours(0, 0, 0, 0);
+
+          return !isNaN(expiryDate) && expiryDate >= today && expiryDate < oneMonthFromNow;
+      } catch (e) {
+          console.error("Error parsing expiry date for", med.product_name, ":", e);
+          return false;
+      }
+    });
+
+    setExpiringMedicines(expiring);
+    // If expiring medicines are found, make sure the alert is initially visible
+    if (expiring.length > 0) {
+        setShowExpiryAlert(true);
+    }
+  };
+
 
   useEffect(() => {
     fetchMedicines();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   useEffect(() => {
-    // Also allow searching by Shop Name or Batch No if desired
     const lowerSearchTerm = searchTerm.toLowerCase();
     const filtered = medicines.filter(
       (medicine) =>
@@ -60,6 +104,8 @@ export default function Inventory() {
 
   const fetchMedicines = async () => {
     setLoading(true);
+    setExpiringMedicines([]);
+    setShowExpiryAlert(false); // Hide alert initially on fetch
     const { data, error } = await supabase
       .from('medicines')
       .select('*')
@@ -68,6 +114,7 @@ export default function Inventory() {
     if (!error && data) {
       setMedicines(data);
       setFilteredMedicines(data);
+      checkExpiryDates(data); // Check expiry and potentially set showExpiryAlert to true
     } else if (error) {
        console.error("Error fetching medicines:", error);
        alert("Failed to load inventory.");
@@ -105,8 +152,38 @@ export default function Inventory() {
     setIsModalOpen(true);
   };
 
+  // Function to handle closing the alert
+  const handleCloseAlert = () => {
+      setShowExpiryAlert(false);
+  };
+
   return (
     <Layout>
+      {/* --- Expiry Alert Section (Conditionally Rendered) --- */}
+      {/* Render only if there are expiring items AND the alert hasn't been closed */}
+      {expiringMedicines.length > 0 && showExpiryAlert && (
+        <Alert
+            severity="warning"
+            icon={<WarningAmberIcon fontSize="inherit" />}
+            sx={{ mb: 3 }}
+            onClose={handleCloseAlert} // <-- Add onClose handler
+        >
+          <AlertTitle>Expiry Warning</AlertTitle>
+          The following medicines are expiring within the next month:
+          <List dense sx={{ pt: 0, maxHeight: 150, overflowY: 'auto' }}>
+            {expiringMedicines.map(med => (
+              <ListItem key={med.id} disablePadding sx={{ pl: 2 }}>
+                <ListItemText
+                  primary={med.product_name}
+                  secondary={`Batch: ${med.batch_no}, Expires: ${formatDate(med.expiry_date)}`}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Alert>
+      )}
+      {/* ----------------------------- */}
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
           Inventory Management
@@ -137,7 +214,6 @@ export default function Inventory() {
         />
       </Paper>
 
-      {/* Make TableContainer take full width */}
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -148,53 +224,57 @@ export default function Inventory() {
             {searchTerm ? 'No medicines found matching your search.' : 'No medicines added yet.'}
           </Typography>
         ) : (
-          // Make table width adjust automatically, minWidth ensures horizontal scroll if needed
           <Table sx={{
-            minWidth: 1200, // Adjust this based on how many columns you have
+            minWidth: 1200,
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
-              padding: '8px 10px', // Smaller padding
-              whiteSpace: 'nowrap', // Prevent text wrapping
+              padding: '8px 10px',
+              whiteSpace: 'nowrap',
             }
           }} size="small">
-            <TableHead sx={{ bgcolor: 'grey.100' }}>
+             <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
-                {/* --- ALL Headers --- */}
                 <TableCell>Product Name</TableCell>
                 <TableCell>Shop Name</TableCell>
                 <TableCell>Batch No</TableCell>
-                <TableCell>Mfg Date</TableCell> {/* Added */}
+                <TableCell>Mfg Date</TableCell>
                 <TableCell>Expiry Date</TableCell>
                 <TableCell>No of Items</TableCell>
                 <TableCell>Drug Type</TableCell>
                 <TableCell>Stock</TableCell>
-                <TableCell>Purchase Rate</TableCell> {/* Added */}
-                <TableCell>GST (%)</TableCell> {/* Added */}
+                <TableCell>Purchase Rate</TableCell>
+                <TableCell>GST (%)</TableCell>
                 <TableCell>MRP</TableCell>
-                <TableCell>Discount (%)</TableCell> {/* Added */}
+                <TableCell>Discount (%)</TableCell>
                 <TableCell align="right">Actions</TableCell>
-                {/* -------------------- */}
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredMedicines.map((medicine) => (
                 <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                  {/* --- ALL Data Cells --- */}
                   <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
                     {medicine.product_name}
                   </TableCell>
                   <TableCell>{medicine.shop_name}</TableCell>
                   <TableCell>{medicine.batch_no}</TableCell>
-                  <TableCell>{formatDate(medicine.mfg_date)}</TableCell> {/* Added + Formatted */}
-                  <TableCell>{formatDate(medicine.expiry_date)}</TableCell> {/* Formatted */}
+                  <TableCell>{formatDate(medicine.mfg_date)}</TableCell>
+                  <TableCell sx={{
+                      backgroundColor: expiringMedicines.some(exp => exp.id === medicine.id)
+                        ? 'warning.light'
+                        : 'inherit',
+                       color: expiringMedicines.some(exp => exp.id === medicine.id)
+                        ? 'warning.contrastText'
+                        : 'inherit',
+                    }}>
+                    {formatDate(medicine.expiry_date)}
+                  </TableCell>
                   <TableCell>{medicine.no_of_items}</TableCell>
                   <TableCell>{medicine.drug_type}</TableCell>
                   <TableCell>{medicine.stock}</TableCell>
-                  <TableCell>₹{medicine.purchase_rate?.toFixed(2)}</TableCell> {/* Added */}
-                  <TableCell>{medicine.gst?.toFixed(2)}%</TableCell> {/* Added */}
+                  <TableCell>₹{medicine.purchase_rate?.toFixed(2)}</TableCell>
+                  <TableCell>{medicine.gst?.toFixed(2)}%</TableCell>
                   <TableCell>₹{medicine.mrp?.toFixed(2)}</TableCell>
-                  <TableCell>{medicine.discount?.toFixed(2)}%</TableCell> {/* Added */}
-                  {/* ---------------------- */}
+                  <TableCell>{medicine.discount?.toFixed(2)}%</TableCell>
                   <TableCell align="right">
                     <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)}>
                       <EditIcon fontSize="small"/>
