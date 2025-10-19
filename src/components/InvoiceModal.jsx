@@ -8,7 +8,6 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  // Grid, // <-- FIX: Removed unused 'Grid' import
   IconButton,
   Paper,
   Table,
@@ -18,22 +17,27 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Divider,
+  Grid,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PrintIcon from '@mui/icons-material/Print';
-import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
+import MedicalServicesIcon from '@mui/icons-material/MedicalServices'; // Your app's icon
 
 export default function InvoiceModal({ open, saleId, onClose }) {
   const [sale, setSale] = useState(null);
   const [saleItems, setSaleItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Helper to get total quantity/units
+  const totalUnits = saleItems.reduce((sum, item) => sum + item.quantity, 0);
+
   const fetchSaleData = useCallback(async () => {
     setLoading(true);
 
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
-      .select('*')
+      .select('*') // Selects all columns
       .eq('id', saleId)
       .maybeSingle();
 
@@ -83,31 +87,52 @@ export default function InvoiceModal({ open, saleId, onClose }) {
         top: 0;
         width: 100%;
         padding: 20px;
+        margin: 0;
       }
       .no-print {
         display: none !important;
       }
+      /* Ensure table borders print */
+      table, th, td {
+        border-color: #000 !important;
+        color: #000 !important;
+      }
+      /* Hide dialog paper shadow/border */
+      .MuiDialog-paper {
+        box-shadow: none !important;
+        border: none !important;
+      }
     }
   `;
-  
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  }
-  
-  const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString('en-IN');
-  }
+
+  const formatDate = (dateString, options = {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+  }) => {
+    if (!dateString) return '-';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date)) return '-';
+        return date.toLocaleDateString('en-IN', options);
+    } catch (e) { return '-' }
+  };
+
+  const formatExpiry = (dateString) => {
+     if (!dateString) return '-';
+      try {
+          const date = new Date(dateString);
+          if (isNaN(date)) return '-';
+          return `${date.getUTCMonth() + 1}/${date.getUTCFullYear()}`;
+      } catch (e) { return '-' }
+  };
+
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <style>{printStyles}</style>
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="no-print">
-        <Typography variant="h5">Invoice</Typography>
+        <Typography variant="h5">Invoice: {sale?.bill_number}</Typography>
         <Box>
           <Button
             variant="contained"
@@ -122,7 +147,7 @@ export default function InvoiceModal({ open, saleId, onClose }) {
           </IconButton>
         </Box>
       </DialogTitle>
-      
+
       <DialogContent>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 10 }}>
@@ -131,78 +156,109 @@ export default function InvoiceModal({ open, saleId, onClose }) {
         ) : !sale ? (
            <Typography>Sale data not found.</Typography>
         ) : (
-          <Box id="invoice-content" sx={{ p: { xs: 2, md: 6 } }}>
+          <Box id="invoice-content" sx={{ p: { xs: 1, md: 3 }, fontFamily: 'monospace', color: '#000' }}>
+
             {/* Header */}
-            <Box sx={{ textAlign: 'center', mb: 4 }}>
-              <MedicalServicesIcon color="primary" sx={{ fontSize: 60 }} />
-              <Typography variant="h3" component="h1" color="primary" sx={{ fontWeight: 'bold' }}>
-                PharmaStock
+            <Box sx={{ textAlign: 'center', mb: 2 }}>
+              <MedicalServicesIcon color="primary" sx={{ fontSize: 40, mb: 1, display: 'block', margin: 'auto' }} />
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+                Srisai Pharmacy
               </Typography>
-              <Typography color="text.secondary">
-                Professional Pharmacy Management
+              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
+                123, Gandhi Road, Chennai - 600001
+              </Typography>
+              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
+                Phone: 044-2345789
+              </Typography>
+               <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>
+                DL No: 86-20-AF/06/04/2017-1411A1 | GST: NOT-APPLIED
               </Typography>
             </Box>
 
-            {/* Invoice Details Only */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 4 }}>
-              <Box sx={{ textAlign: 'right' }}>
-                  <Typography variant="overline" color="text.secondary">Invoice Details</Typography>
-                  <Typography><Box component="span" sx={{ fontWeight: 'bold' }}>Bill Number:</Box> {sale.bill_number}</Typography>
-                  <Typography><Box component="span" sx={{ fontWeight: 'bold' }}>Date:</Box> {formatDate(sale.sale_date)}</Typography>
-                  <Typography><Box component="span" sx={{ fontWeight: 'bold' }}>Time:</Box> {formatTime(sale.sale_date)}</Typography>
-              </Box>
-            </Box>
+            <Divider sx={{ my: 1, borderColor: '#000' }} />
 
-            {/* Items Table */}
-            <TableContainer component={Paper} variant="outlined" sx={{ mb: 4 }}>
-              <Table>
-                <TableHead sx={{ bgcolor: 'grey.100' }}>
+            {/* Bill Info - Removed Doctor Line */}
+            <Grid container spacing={1} sx={{ fontSize: '0.9rem', mb: 1 }}>
+                <Grid item xs={8}>
+                    {/* Display Party/Customer info even if default */}
+                    <Typography variant="body2"><strong>Party:</strong> {sale.customer_name} ({sale.customer_phone})</Typography>
+                    {/* <Typography variant="body2"><strong>Doctor:</strong> {sale.doctor_name || 'N/A'}</Typography> */} {/* <-- REMOVED THIS LINE */}
+                </Grid>
+                 <Grid item xs={4} sx={{ textAlign: 'right' }}>
+                    <Typography variant="body2"><strong>Inv No:</strong> {sale.bill_number}</Typography>
+                    <Typography variant="body2"><strong>Inv Date:</strong> {formatDate(sale.sale_date)}</Typography>
+                    <Typography variant="body2"><strong>Bill Type:</strong> Cash</Typography>
+                </Grid>
+            </Grid>
+
+            <Divider sx={{ my: 1, borderColor: '#000', borderStyle: 'dashed' }} />
+
+
+            {/* Items Table (No changes needed here from previous version) */}
+            <TableContainer>
+              <Table size="small" sx={{ border: '1px solid #000' }}>
+                <TableHead sx={{ borderBottom: '1px solid #000' }}>
                   <TableRow>
-                    <TableCell>Product Name</TableCell>
-                    <TableCell>Batch No</TableCell>
-                    <TableCell>Expiry Date</TableCell>
-                    <TableCell align="right">MRP</TableCell>
-                    <TableCell align="center">Quantity</TableCell>
-                    <TableCell align="right">Subtotal</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Mfg</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Product Name</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Sch</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Batch</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold' }}>Exp</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Qty</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Rate</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>Amount</TableCell>
+                    <TableCell sx={{ p: 0.5, border: '1px solid #000', fontWeight: 'bold', textAlign: 'right' }}>MRP</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {saleItems.map((item, index) => (
                     <TableRow key={index}>
-                      <TableCell>{item.product_name}</TableCell>
-                      <TableCell>{item.batch_no}</TableCell>
-                      <TableCell>{formatDate(item.expiry_date)}</TableCell>
-                      <TableCell align="right">₹{item.mrp.toFixed(2)}</TableCell>
-                      <TableCell align="center">{item.quantity}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        ₹{item.subtotal.toFixed(2)}
-                      </TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>-</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{item.product_name}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>-</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{item.batch_no}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000' }}>{formatExpiry(item.expiry_date)}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.quantity}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.mrp?.toFixed(2)}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.subtotal?.toFixed(2)}</TableCell>
+                      <TableCell sx={{ p: 0.5, border: '1px solid #000', textAlign: 'right' }}>{item.mrp?.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
 
-            {/* Grand Total */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 4 }}>
-              <Paper sx={{ p: 2, backgroundColor: 'primary.main', color: 'white', minWidth: 300 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="h6">Grand Total</Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    ₹{sale.grand_total.toFixed(2)}
-                  </Typography>
-                </Box>
-              </Paper>
-            </Box>
+            <Divider sx={{ my: 1, borderColor: '#000', borderStyle: 'dashed' }} />
 
-            {/* Footer */}
-            <Box sx={{ textAlign: 'center', pt: 3, borderTop: '1px solid #eee' }}>
-              <Typography color="text.secondary" sx={{ mb: 1 }}>
-                Thank you for your business!
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                This is a computer-generated invoice and does not require a signature.
-              </Typography>
+
+            {/* Footer Totals (No changes needed here) */}
+            <Grid container spacing={1} sx={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                <Grid item xs={6}>
+                    <Typography variant="body2">Items: {saleItems.length}</Typography>
+                    <Typography variant="body2">Units: {totalUnits}</Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>*PLEASE GET YOUR MEDICINES CHECKED BY YOUR DOCTOR BEFORE USE*</Typography>
+                </Grid>
+                <Grid item xs={6} sx={{ textAlign: 'right' }}>
+                    <Typography variant="body2">Disc: 0.00</Typography>
+                    <Typography variant="body2">Save Amt: 0.00</Typography>
+                     <Typography variant="body2" sx={{ mt: 0.5 }}>GrossAmt: {sale.grand_total?.toFixed(2)}</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mt: 0.5 }}>NetAmt: {sale.grand_total?.toFixed(2)}</Typography>
+                </Grid>
+            </Grid>
+
+            <Divider sx={{ my: 1, borderColor: '#000' }} />
+
+
+            {/* Footer (No changes needed here) */}
+            <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                    Each item Subject to V/J/Tax/Disc/Distriibution only.<br/>
+                    Once Goods sold will not be taken back or exchanged.
+                </Typography>
+                 <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right' }}>
+                    For Srisai Pharmacy<br/><br/>
+                    (Signature)
+                </Typography>
             </Box>
           </Box>
         )}

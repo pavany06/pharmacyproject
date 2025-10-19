@@ -1,7 +1,7 @@
 // src/pages/NewSale.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase'; //
+import { useAuth } from '../contexts/AuthContext'; //
 import {
   Autocomplete,
   Box,
@@ -24,14 +24,14 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PrintIcon from '@mui/icons-material/Print';
-import Layout from '../components/Layout';
-import InvoiceModal from '../components/InvoiceModal';
+import Layout from '../components/Layout'; //
+import InvoiceModal from '../components/InvoiceModal'; //
 
 export default function NewSale() {
-  const { user } = useAuth();
+  const { user } = useAuth(); //
   const [medicines, setMedicines] = useState([]);
   const [selectedMedicine, setSelectedMedicine] = useState(null);
-  const [quantity, setQuantity] = useState(''); // <-- Changed default from 1 to ''
+  const [quantity, setQuantity] = useState('');
   const [billItems, setBillItems] = useState([]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [saleId, setSaleId] = useState(null);
@@ -40,10 +40,10 @@ export default function NewSale() {
   const [snackbarSeverity, setSnackbarSeverity] = useState('info');
 
   const fetchMedicines = useCallback(async () => {
-    console.log("Fetching medicines...");
-    const { data, error } = await supabase
+    // console.log("Fetching medicines...");
+    const { data, error } = await supabase //
       .from('medicines')
-      .select('id, product_name, batch_no, expiry_date, mrp, stock');
+      .select('id, product_name, batch_no, expiry_date, mrp, stock'); // Keep fetching stock for display/check
 
     if(error){
       console.error("Error fetching medicines:", error);
@@ -51,9 +51,9 @@ export default function NewSale() {
     } else if (data) {
         data.sort((a, b) => a.product_name.localeCompare(b.product_name));
         setMedicines(data);
-        console.log("Medicines fetched:", data.length);
+        // console.log("Medicines fetched:", data.length);
     } else {
-        console.warn("No medicine data returned.");
+        // console.warn("No medicine data returned.");
         setMedicines([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,27 +78,27 @@ export default function NewSale() {
 
 
   const handleAddItem = () => {
-    // Ensure quantity is entered and is a positive number
     const qtyToAdd = parseInt(quantity, 10);
     if (!selectedMedicine || isNaN(qtyToAdd) || qtyToAdd <= 0) {
         showSnackbar("Please select a medicine and enter a valid positive quantity.", "warning");
         return;
     };
 
-
+    // --- Stock Check Logic (Still useful to prevent selling more than available) ---
     const availableStock = selectedMedicine.stock ?? 0;
     const quantityAlreadyInBill = billItems
         .filter(item => item.medicine_id === selectedMedicine.id)
         .reduce((sum, item) => sum + item.quantity, 0);
 
-    const requestedTotalQuantity = quantityAlreadyInBill + qtyToAdd; // Use parsed quantity
+    const requestedTotalQuantity = quantityAlreadyInBill + qtyToAdd;
 
-    console.log(`Adding Item: ${selectedMedicine.product_name}, Qty: ${qtyToAdd}, In Bill: ${quantityAlreadyInBill}, Available: ${availableStock}`);
+    // console.log(`Adding Item: ${selectedMedicine.product_name}, Qty: ${qtyToAdd}, In Bill: ${quantityAlreadyInBill}, Available: ${availableStock}`);
 
     if (requestedTotalQuantity > availableStock) {
         showSnackbar(`Cannot add ${qtyToAdd}. Only ${availableStock - quantityAlreadyInBill} of ${selectedMedicine.product_name} available in stock.`, "error");
-        return;
+        return; // Stop the function here
     }
+    // --- End Stock Check ---
 
 
     const existingItem = billItems.find(
@@ -111,7 +111,7 @@ export default function NewSale() {
           item.medicine_id === selectedMedicine.id
             ? {
                 ...item,
-                quantity: item.quantity + qtyToAdd, // Use parsed quantity
+                quantity: item.quantity + qtyToAdd,
                 subtotal: (item.quantity + qtyToAdd) * item.mrp,
               }
             : item
@@ -124,14 +124,14 @@ export default function NewSale() {
         batch_no: selectedMedicine.batch_no,
         expiry_date: selectedMedicine.expiry_date,
         mrp: selectedMedicine.mrp,
-        quantity: qtyToAdd, // Use parsed quantity
+        quantity: qtyToAdd,
         subtotal: selectedMedicine.mrp * qtyToAdd,
       };
       setBillItems([...billItems, newItem]);
     }
 
     setSelectedMedicine(null);
-    setQuantity(''); // Reset quantity to empty string
+    setQuantity('');
   };
 
   const handleRemoveItem = (index) => {
@@ -140,50 +140,13 @@ export default function NewSale() {
 
   const grandTotal = billItems.reduce((total, item) => total + item.subtotal, 0);
 
+  // --- REMOVED Stock Update Function ---
+  /*
   const updateStockLevels = async (itemsSold) => {
-      console.log("Attempting to update stock for items:", itemsSold);
-      const updates = itemsSold.map(async (item) => {
-          const { data: currentMedicineData, error: fetchError } = await supabase
-              .from('medicines')
-              .select('stock')
-              .eq('id', item.medicine_id)
-              .single();
-
-          if (fetchError || !currentMedicineData) {
-              console.error(`Error fetching current stock for ${item.product_name} (ID: ${item.medicine_id}):`, fetchError);
-              throw new Error(`Could not verify stock for ${item.product_name}. Update failed.`);
-          }
-
-          const currentStock = currentMedicineData.stock ?? 0;
-          const newStock = currentStock - item.quantity;
-
-          if (newStock < 0) {
-              console.warn(`Stock for ${item.product_name} would go below zero (${newStock}). Setting to 0 instead.`);
-          }
-
-          const { error: updateError } = await supabase
-              .from('medicines')
-              .update({ stock: Math.max(0, newStock) })
-              .eq('id', item.medicine_id);
-
-          if (updateError) {
-              console.error(`Error updating stock for ${item.product_name} (ID: ${item.medicine_id}):`, updateError);
-              throw new Error(`Failed to update stock for ${item.product_name}.`);
-          }
-           console.log(`Successfully updated stock for ${item.product_name} to ${Math.max(0, newStock)}`);
-          return true;
-      });
-
-      try {
-          await Promise.all(updates);
-          console.log("All stock levels updated successfully.");
-          return true;
-      } catch (error) {
-          console.error("One or more stock updates failed:", error);
-          showSnackbar(`Error updating stock levels: ${error.message}`, "error");
-          return false;
-      }
+      // ... function content removed ...
   };
+  */
+  // ------------------------------------
 
 
   const handleGenerateBill = async () => {
@@ -192,29 +155,28 @@ export default function NewSale() {
       return;
     }
 
+    // --- REMOVED: Extra stock re-verification check (less critical now) ---
+    /*
     let stockSufficient = true;
     for (const item of billItems) {
-        const med = medicines.find(m => m.id === item.medicine_id);
-        if (!med || (med.stock ?? 0) < item.quantity) {
-             showSnackbar(`Stock changed for ${item.product_name}. Only ${med?.stock ?? 0} available. Please remove item or reduce quantity.`, "error");
-             stockSufficient = false;
-             break;
-        }
+        // ... check logic removed ...
     }
     if (!stockSufficient) {
         fetchMedicines();
         return;
     }
+    */
+    // --------------------------------------------------------------------
 
 
     const billNumber = `BILL-${Date.now()}`;
 
     // 1. Create the sale record
-    const { data: saleData, error: saleError } = await supabase
+    const { data: saleData, error: saleError } = await supabase //
       .from('sales')
       .insert([
         {
-          user_id: user.id,
+          user_id: user.id, //
           bill_number: billNumber,
           customer_name: 'Walk-in',
           customer_phone: '-',
@@ -242,34 +204,38 @@ export default function NewSale() {
       subtotal: item.subtotal,
     }));
 
-    const { error: itemsError } = await supabase.from('sale_items').insert(saleItems);
+    const { error: itemsError } = await supabase.from('sale_items').insert(saleItems); //
 
     if (itemsError) {
       showSnackbar(`Error saving sale items: ${itemsError.message}`, "error");
+      // Optional: Delete the 'sales' record if items fail
+      // await supabase.from('sales').delete().eq('id', saleData.id);
       return;
     }
 
-    // 3. Update Stock Levels
-    const stockUpdateSuccess = await updateStockLevels(billItems);
+    // --- 3. SKIPPING Stock Levels Update ---
+    // const stockUpdateSuccess = await updateStockLevels(billItems);
+    // --------------------------------------
 
-    if (stockUpdateSuccess) {
-        showSnackbar("Sale recorded and stock updated successfully!", "success");
-        setSaleId(saleData.id);
-        setShowInvoice(true);
-    } else {
-         showSnackbar("Sale recorded, but failed to update stock levels automatically. Please check inventory manually.", "error");
-    }
+    // Proceed directly to showing invoice
+    showSnackbar("Sale recorded successfully!", "success"); // Update success message
+    setSaleId(saleData.id);
+    setShowInvoice(true);
+    // No need to fetch medicines here anymore, as stock wasn't changed by this action
+    // fetchMedicines();
+
   };
 
   const handleCloseInvoice = () => {
     setShowInvoice(false);
     setSaleId(null);
     setBillItems([]);
+    // You might still want to fetch medicines in case stock was updated manually elsewhere
     fetchMedicines();
   };
 
   return (
-    <Layout>
+    <Layout> {/* */}
       <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
         New Sale
       </Typography>
@@ -355,12 +321,11 @@ export default function NewSale() {
             <TextField
               label="Qty"
               type="number"
-              value={quantity} // Reads from state (now defaults to '')
-              onChange={(e) => setQuantity(e.target.value)} // Update state directly
-              // Removed default value, but keep min attribute
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
               InputProps={{ inputProps: { min: "1" } }}
               fullWidth
-              required // Add required to ensure user enters a value
+              required
             />
           </Grid>
 
@@ -465,13 +430,14 @@ export default function NewSale() {
         </Alert>
       </Snackbar>
 
+
       {showInvoice && saleId && (
-        <InvoiceModal
+        <InvoiceModal //
           open={showInvoice}
           saleId={saleId}
           onClose={handleCloseInvoice}
         />
       )}
-    </Layout>
+    </Layout> //
   );
 }
