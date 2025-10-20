@@ -188,9 +188,9 @@ export default function InvoiceModal({ open, saleId, onClose }) {
             
             {/* Pharmacy Header */}
             <Box sx={{ textAlign: 'center', mb: 2 }}>
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>Srisai Pharmacy</Typography>
-              <Typography variant="body2">High School Road, Patamata, Vijayawada - 520010</Typography>
-              <Typography variant="body2">Andhra Pradesh</Typography>
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>Sri Sai Pharmacy</Typography>
+              <Typography variant="body2">High School Road bus stop, Patamata</Typography>
+              <Typography variant="body2">Vijayawada-10</Typography>
               <Typography variant="body2">Phone: +91 99634 03097</Typography>
               <Typography variant="body2">D.L. No: 141268, 141269 | GST: APPLIED</Typography>
             </Box>
@@ -275,7 +275,7 @@ export default function InvoiceModal({ open, saleId, onClose }) {
                 Once goods sold will not be taken back or exchanged.
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right' }}>
-                For Srisai Pharmacy<br /><br />
+                For Sri Sai Pharmacy<br /><br />
               </Typography>
             </Box>
           </Box>
