@@ -114,11 +114,12 @@ export default function NewSale() {
       .from('medicines')
       .select('id, product_name, batch_no, expiry_date, mrp, stock, gst, discount');
 
-    if(error){ showSnackbar("Error fetching medicine list.", "error"); }
+    if(error){ showSnackbar("Error fetching medicine list.", "error"); return []; } // Added return []
     else if (data) {
         data.sort((a, b) => a.product_name.localeCompare(b.product_name));
         setMedicines(data);
-    } else { setMedicines([]); }
+        return data; // Return data
+    } else { setMedicines([]); return []; } // Added return []
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -257,7 +258,7 @@ export default function NewSale() {
     const totalExtraDiscount = billItems.reduce((total, item) => total + item.extraDiscountAmount, 0);
     const totalDiscount = totalStandardDiscount + totalExtraDiscount; // Combined total discount
 
-  // ... (handleGenerateBill remains the same) ...
+  // ... (handleGenerateBill updated with fresh stock check - remains the same as last update) ...
    const handleGenerateBill = async () => {
     // --- Validation (remains the same) ---
     if (billItems.length === 0) {
@@ -269,7 +270,15 @@ export default function NewSale() {
         return;
     }
 
-    // --- Stock re-check (remains the same) ---
+     // --- Fetch FRESH stock data right before checking ---
+     const currentMedicinesData = await fetchMedicines();
+     if (!currentMedicinesData || currentMedicinesData.length === 0) {
+         showSnackbar("Could not verify current stock levels. Please try again.", "error");
+         return; // Stop if we can't get fresh data
+     }
+     // --- ---
+
+    // --- Stock re-check (using FRESH data) ---
     let stockSufficient = true;
     const stockMap = billItems.reduce((map, item) => {
         map[item.medicine_id] = (map[item.medicine_id] || 0) + item.quantity;
@@ -277,16 +286,21 @@ export default function NewSale() {
     }, {});
 
     for (const medicineId in stockMap) {
-        const med = medicines.find(m => m.id === parseInt(medicineId, 10)); // Ensure ID is integer for comparison
+        // Use currentMedicinesData for the check
+        const med = currentMedicinesData.find(m => m.id === parseInt(medicineId, 10));
         const requiredQty = stockMap[medicineId];
-        if (!med || (med.stock ?? 0) < requiredQty) {
-            showSnackbar(`Stock changed for ${med?.product_name || `ID ${medicineId}`}. Only ${med?.stock ?? 0} available, ${requiredQty} required in bill.`, "error");
+        const currentStock = med?.stock ?? 0; // Get stock from fresh data
+
+        if (!med || currentStock < requiredQty) {
+            // Update error message to show the stock level found *during this check*
+            showSnackbar(`Stock changed for ${med?.product_name || `ID ${medicineId}`}. Only ${currentStock} available, ${requiredQty} required in bill.`, "error");
             stockSufficient = false;
             break;
         }
     }
-    if (!stockSufficient) { fetchMedicines(); return; }
-
+     // If stock is insufficient based on the *fresh* data, stop.
+     if (!stockSufficient) { return; }
+     // --- End Stock Re-check ---
 
     const billNumber = `BILL-${Date.now()}`;
 
@@ -299,7 +313,7 @@ export default function NewSale() {
               bill_number: billNumber,
               customer_name: 'Walk-in',
               customer_phone: customerPhone,
-              grand_total: grandTotal, // Use the final grand total
+              grand_total: grandTotal,
               sale_date: new Date().toISOString(),
             },
           ])
@@ -316,8 +330,7 @@ export default function NewSale() {
             expiry_date: item.expiry_date,
             mrp: item.mrp,
             quantity: item.quantity,
-            subtotal: item.finalSubtotal, // Save the final calculated subtotal for the line item
-            // Add extra discount fields (ensure columns exist in Supabase table)
+            subtotal: item.finalSubtotal,
             extra_discount_type: item.extraDiscountType,
             extra_discount_value: item.extraDiscountValue,
             extra_discount_amount: item.extraDiscountAmount,
@@ -326,19 +339,19 @@ export default function NewSale() {
 
         if (itemsError) { throw new Error(`Error saving sale items: ${itemsError.message}`); }
 
-        // --- 3. Update stock for each medicine sold (using the consolidated stockMap) ---
+        // --- 3. Update stock for each medicine sold (using stockMap and FRESH data for calculation) ---
         const stockUpdatePromises = Object.entries(stockMap).map(([medicineIdStr, quantitySold]) => {
             const medicineId = parseInt(medicineIdStr, 10);
-            const originalMedicine = medicines.find(med => med.id === medicineId);
+            const originalMedicine = currentMedicinesData.find(med => med.id === medicineId);
             if (!originalMedicine) {
-                console.error(`Medicine with ID ${medicineId} not found locally for stock update.`);
-                return Promise.resolve(); // Skip update for this item
+                console.error(`Medicine with ID ${medicineId} not found in fresh data for stock update.`);
+                return Promise.resolve({ error: { message: `Medicine ID ${medicineId} not found.`} }); // Indicate error
             }
             const newStock = (originalMedicine.stock ?? 0) - quantitySold;
 
             return supabase
                 .from('medicines')
-                .update({ stock: Math.max(0, newStock) }) // Ensure stock doesn't go below 0
+                .update({ stock: Math.max(0, newStock) })
                 .eq('id', medicineId);
         });
 
@@ -369,7 +382,7 @@ export default function NewSale() {
     setCustomerPhone('');
     setExtraDiscountType('percent'); // Reset extra discount state
     setExtraDiscountValue('');
-    fetchMedicines(); // Refetch medicines to get updated stock
+    fetchMedicines(); // Refetch medicines to update Autocomplete state
   };
 
 
@@ -416,8 +429,9 @@ export default function NewSale() {
            {/* Row 2: Info Text, Qty, Disc Type, Value, Add Button */}
            <Grid item container spacing={2} xs={12} alignItems="center">
                {/* Info text / Selected Medicine Box */}
-               <Grid item xs={12} sm={6} md={7}>
-                   <Paper variant="outlined" sx={{ p: '6px 14px', height: '40px', bgcolor: 'background.paper', display: 'flex', alignItems: 'center' }}>
+               {/* This now sits below the other controls on smaller screens */}
+               <Grid item xs={12} sm={12} md={7} order={{ xs: 5, sm: 1 }}> {/* Order last on xs, first on sm+ */}
+                   <Paper variant="outlined" sx={{ p: '6px 14px', height: '40px', bgcolor: 'background.paper', display: 'flex', alignItems: 'center', mt: { xs: 1, sm: 0 } }}>
                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }} noWrap>
                             {selectedMedicine
                                 ? `Stock: ${selectedMedicine.stock ?? 'N/A'} | MRP: ₹${selectedMedicine.mrp?.toFixed(2)} | Batch: ${selectedMedicine.batch_no}`
@@ -428,12 +442,12 @@ export default function NewSale() {
                </Grid>
 
                {/* Quantity - Small */}
-               <Grid item xs={4} sm={2} md={1}>
+               <Grid item xs={4} sm={3} md={1} order={{ xs: 1, sm: 2 }}> {/* Order first on xs */}
                   <TextField label="Qty" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} InputProps={{ inputProps: { min: "1" } }} fullWidth required variant="outlined" size="small" sx={numberInputStyles}/>
                </Grid>
 
                {/* Extra Discount Type - Small */}
-               <Grid item xs={4} sm={2} md={1}>
+               <Grid item xs={4} sm={3} md={1} order={{ xs: 2, sm: 3 }}> {/* Order second on xs */}
                    <FormControl fullWidth size="small">
                        <InputLabel id="extra-discount-type-label">Disc Type</InputLabel>
                        <Select
@@ -449,7 +463,7 @@ export default function NewSale() {
                </Grid>
 
                {/* Extra Discount Value - Small */}
-               <Grid item xs={4} sm={2} md={1}>
+               <Grid item xs={4} sm={3} md={1} order={{ xs: 3, sm: 4 }}> {/* Order third on xs */}
                    <TextField
                        label="Value"
                        type="number"
@@ -468,7 +482,7 @@ export default function NewSale() {
                </Grid>
 
                 {/* Add Button */}
-                <Grid item xs={12} sm={4} md={2} sx={{ display: 'flex', alignItems: 'stretch' }}>
+                <Grid item xs={12} sm={3} md={2} sx={{ display: 'flex', alignItems: 'stretch' }} order={{ xs: 4, sm: 5 }}> {/* Order fourth on xs */}
                     <Button
                     variant="contained"
                     color="success"
