@@ -27,6 +27,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'; // Icon for low stock
 import Layout from '../components/Layout';
 import MedicineModal from '../components/MedicineModal';
 
@@ -36,10 +37,13 @@ const formatDate = (dateString) => {
   try {
       const parts = dateString.split('-');
       if (parts.length !== 3) return '-';
+      // Ensure date is parsed as UTC to avoid timezone issues
       const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
       if (isNaN(date)) return '-';
-      return date.toLocaleDateString('en-GB');
+      // Format as DD/MM/YYYY
+      return date.toLocaleDateString('en-GB', { timeZone: 'UTC' });
   } catch (e) {
+      console.error("Error formatting date:", dateString, e);
       return '-';
   }
 };
@@ -53,9 +57,14 @@ export default function Inventory() {
   const [editingMedicine, setEditingMedicine] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expiringMedicines, setExpiringMedicines] = useState([]);
+  const [lowStockMedicines, setLowStockMedicines] = useState([]); // State for low stock items
   const [showExpiryAlert, setShowExpiryAlert] = useState(true);
+  const [showLowStockAlert, setShowLowStockAlert] = useState(true); // State for low stock alert visibility
 
-  const checkExpiryDates = (medicineList) => {
+
+  // Check both expiry and low stock
+  const checkWarnings = (medicineList) => {
+    // --- Expiry Check ---
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
@@ -76,11 +85,20 @@ export default function Inventory() {
           return false;
       }
     });
-
     setExpiringMedicines(expiring);
-    if (expiring.length > 0) {
-        setShowExpiryAlert(true);
-    }
+    setShowExpiryAlert(expiring.length > 0); // Show alert only if items exist
+
+    // --- Low Stock Check ---
+    const lowStock = medicineList.filter(med => {
+        // Check if stock is less than or equal to reminder_quantity
+        // Handle cases where reminder_quantity might be null or undefined
+        const reminderQty = med.reminder_quantity ?? 0; // Default to 0 if null/undefined
+        const currentStock = med.stock ?? 0;
+        // Trigger if stock is positive but at or below reminder level
+        return currentStock > 0 && reminderQty > 0 && currentStock <= reminderQty;
+    });
+    setLowStockMedicines(lowStock);
+    setShowLowStockAlert(lowStock.length > 0); // Show alert only if items exist
   };
 
 
@@ -93,9 +111,9 @@ export default function Inventory() {
     const lowerSearchTerm = searchTerm.toLowerCase();
     const filtered = medicines.filter(
       (medicine) =>
-        medicine.product_name.toLowerCase().includes(lowerSearchTerm) ||
-        medicine.shop_name.toLowerCase().includes(lowerSearchTerm) ||
-        medicine.batch_no.toLowerCase().includes(lowerSearchTerm)
+        (medicine.product_name?.toLowerCase() || '').includes(lowerSearchTerm) ||
+        (medicine.shop_name?.toLowerCase() || '').includes(lowerSearchTerm) ||
+        (medicine.batch_no?.toLowerCase() || '').includes(lowerSearchTerm)
     );
     setFilteredMedicines(filtered);
   }, [searchTerm, medicines]);
@@ -104,16 +122,19 @@ export default function Inventory() {
   const fetchMedicines = async () => {
     setLoading(true);
     setExpiringMedicines([]);
+    setLowStockMedicines([]); // Reset low stock state on fetch
     setShowExpiryAlert(false);
+    setShowLowStockAlert(false); // Reset low stock alert visibility
     const { data, error } = await supabase
       .from('medicines')
+      // Make sure to select the new reminder_quantity column
       .select('*')
       .order('created_at', { ascending: false });
 
     if (!error && data) {
       setMedicines(data);
       setFilteredMedicines(data);
-      checkExpiryDates(data);
+      checkWarnings(data); // Call the combined check function
     } else if (error) {
        console.error("Error fetching medicines:", error);
        alert("Failed to load inventory.");
@@ -127,7 +148,7 @@ export default function Inventory() {
     const { error } = await supabase.from('medicines').delete().eq('id', id);
 
     if (!error) {
-      fetchMedicines();
+      fetchMedicines(); // Refetch to update list and warnings
     } else {
       console.error("Error deleting medicine:", error);
       alert("Failed to delete medicine.");
@@ -143,7 +164,7 @@ export default function Inventory() {
   const handleModalClose = () => {
     setIsModalOpen(false);
     setEditingMedicine(null);
-    fetchMedicines();
+    fetchMedicines(); // Refetch data after modal closes (add or edit)
   };
 
   const handleAddNew = () => {
@@ -151,18 +172,22 @@ export default function Inventory() {
     setIsModalOpen(true);
   };
 
-  const handleCloseAlert = () => {
+  const handleCloseExpiryAlert = () => {
       setShowExpiryAlert(false);
+  };
+  const handleCloseLowStockAlert = () => {
+      setShowLowStockAlert(false);
   };
 
   return (
     <Layout>
+      {/* Expiry Warning Alert */}
       {expiringMedicines.length > 0 && showExpiryAlert && (
         <Alert
             severity="warning"
             icon={<WarningAmberIcon fontSize="inherit" />}
-            sx={{ mb: 3 }}
-            onClose={handleCloseAlert}
+            sx={{ mb: 2 }} // Adjusted margin bottom
+            onClose={handleCloseExpiryAlert}
         >
           <AlertTitle>Expiry Warning</AlertTitle>
           The following medicines are expiring within the next month:
@@ -170,8 +195,31 @@ export default function Inventory() {
             {expiringMedicines.map(med => (
               <ListItem key={med.id} disablePadding sx={{ pl: 2 }}>
                 <ListItemText
-                  primary={med.product_name}
-                  secondary={`Batch: ${med.batch_no}, Expires: ${formatDate(med.expiry_date)}`}
+                  primary={`${med.product_name} (Batch: ${med.batch_no})`}
+                  secondary={`Expires: ${formatDate(med.expiry_date)}`}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Alert>
+      )}
+
+      {/* Low Stock Warning Alert */}
+      {lowStockMedicines.length > 0 && showLowStockAlert && (
+        <Alert
+            severity="info" // Use info or warning severity as you prefer
+            icon={<Inventory2OutlinedIcon fontSize="inherit" />}
+            sx={{ mb: 3 }}
+            onClose={handleCloseLowStockAlert}
+        >
+          <AlertTitle>Low Stock Reminder</AlertTitle>
+          The following medicines are at or below the set reminder quantity:
+          <List dense sx={{ pt: 0, maxHeight: 150, overflowY: 'auto' }}>
+            {lowStockMedicines.map(med => (
+              <ListItem key={med.id} disablePadding sx={{ pl: 2 }}>
+                <ListItemText
+                  primary={`${med.product_name} (Batch: ${med.batch_no})`}
+                  secondary={`Current Stock: ${med.stock}, Reminder at: ${med.reminder_quantity}`}
                 />
               </ListItem>
             ))}
@@ -220,7 +268,7 @@ export default function Inventory() {
           </Typography>
         ) : (
           <Table sx={{
-            minWidth: 1100, // Adjusted minWidth slightly
+            minWidth: 1100,
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
               padding: '8px 10px',
@@ -229,62 +277,64 @@ export default function Inventory() {
           }} size="small">
             <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
-                {/* --- Updated Headers (Mfg Date removed) --- */}
                 <TableCell>Product Name</TableCell>
                 <TableCell>Shop Name</TableCell>
                 <TableCell>Batch No</TableCell>
-                {/* <TableCell>Mfg Date</TableCell> */} {/* Removed */}
                 <TableCell>Expiry Date</TableCell>
                 <TableCell>No of Items</TableCell>
                 <TableCell>Drug Type</TableCell>
-                <TableCell>Stock</TableCell>
+                <TableCell>Stock</TableCell> {/* No change here */}
                 <TableCell>Purchase Rate</TableCell>
                 <TableCell>GST (%)</TableCell>
                 <TableCell>MRP</TableCell>
                 <TableCell>Discount (%)</TableCell>
                 <TableCell align="right">Actions</TableCell>
-                {/* ------------------------------------------- */}
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredMedicines.map((medicine) => (
-                <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                  {/* --- Updated Data Cells (Mfg Date removed) --- */}
-                  <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
-                    {medicine.product_name}
-                  </TableCell>
-                  <TableCell>{medicine.shop_name}</TableCell>
-                  <TableCell>{medicine.batch_no}</TableCell>
-                  {/* <TableCell>{formatDate(medicine.mfg_date)}</TableCell> */} {/* Removed */}
-                  <TableCell sx={{
-                      backgroundColor: expiringMedicines.some(exp => exp.id === medicine.id)
-                        ? 'warning.light'
-                        : 'inherit',
-                       color: expiringMedicines.some(exp => exp.id === medicine.id)
-                        ? 'warning.contrastText'
-                        : 'inherit',
-                    }}>
-                    {formatDate(medicine.expiry_date)}
-                  </TableCell>
-                  <TableCell>{medicine.no_of_items}</TableCell>
-                  <TableCell>{medicine.drug_type}</TableCell>
-                  <TableCell>{medicine.stock}</TableCell>
-                  <TableCell>₹{medicine.purchase_rate?.toFixed(2)}</TableCell>
-                  <TableCell>{medicine.gst?.toFixed(2)}%</TableCell>
-                  <TableCell>₹{medicine.mrp?.toFixed(2)}</TableCell>
-                   {/* Display discount or '-' if null/zero */}
-                  <TableCell>{medicine.discount ? `${medicine.discount.toFixed(2)}%` : '-'}</TableCell>
-                  {/* --------------------------------------------- */}
-                  <TableCell align="right">
-                    <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)}>
-                      <EditIcon fontSize="small"/>
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(medicine.id)}>
-                      <DeleteIcon fontSize="small"/>
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredMedicines.map((medicine) => {
+                const isExpiring = expiringMedicines.some(exp => exp.id === medicine.id);
+                const isLowStock = lowStockMedicines.some(low => low.id === medicine.id); // Check if low stock
+
+                return (
+                  <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                    <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
+                      {medicine.product_name}
+                    </TableCell>
+                    <TableCell>{medicine.shop_name}</TableCell>
+                    <TableCell>{medicine.batch_no}</TableCell>
+                    {/* Expiry Date Cell Highlighting */}
+                    <TableCell sx={{
+                        backgroundColor: isExpiring ? 'warning.light' : 'inherit',
+                        color: isExpiring ? 'warning.contrastText' : 'inherit',
+                      }}>
+                      {formatDate(medicine.expiry_date)}
+                    </TableCell>
+                    <TableCell>{medicine.no_of_items}</TableCell>
+                    <TableCell>{medicine.drug_type}</TableCell>
+                    {/* Stock Cell Highlighting */}
+                    <TableCell sx={{
+                        backgroundColor: isLowStock ? 'info.light' : 'inherit', // Use info color for low stock
+                        color: isLowStock ? 'info.contrastText' : 'inherit',
+                        fontWeight: isLowStock ? 'bold' : 'normal', // Optional: make bold
+                      }}>
+                      {medicine.stock}
+                    </TableCell>
+                    <TableCell>₹{medicine.purchase_rate?.toFixed(2)}</TableCell>
+                    <TableCell>{medicine.gst?.toFixed(2)}%</TableCell>
+                    <TableCell>₹{medicine.mrp?.toFixed(2)}</TableCell>
+                    <TableCell>{medicine.discount ? `${medicine.discount.toFixed(2)}%` : '-'}</TableCell>
+                    <TableCell align="right">
+                      <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)}>
+                        <EditIcon fontSize="small"/>
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(medicine.id)}>
+                        <DeleteIcon fontSize="small"/>
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

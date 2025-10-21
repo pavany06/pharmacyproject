@@ -19,20 +19,20 @@ import {
   FormControl,
 } from '@mui/material';
 
-// Updated initial state
+// Updated initial state to include reminder_quantity
 const initialFormData = {
   product_name: '',
   shop_name: '',
   batch_no: '',
   no_of_items: '',
   drug_type: 'tablet',
-  // mfg_date: '', // <-- Removed
   expiry_date: '',
   purchase_rate: '',
   gst: '',
   mrp: '',
-  discount: '', // <-- Changed default from '0.00' to empty string ''
+  discount: '',
   stock: '0',
+  reminder_quantity: '5', // Added default reminder quantity
 };
 
 const drugTypes = ['tonic', 'syrup', 'tablet', 'capsule', 'ointment', 'other'];
@@ -46,32 +46,35 @@ export default function MedicineModal({ open, medicine, onClose }) {
 
   useEffect(() => {
     if (medicine) {
-      // Populate form without mfg_date, handle null discount
+      // Populate form including reminder_quantity
       setFormData({
         product_name: medicine.product_name,
         shop_name: medicine.shop_name,
         batch_no: medicine.batch_no,
         no_of_items: medicine.no_of_items,
         drug_type: drugTypes.includes(medicine.drug_type) ? medicine.drug_type : 'tablet',
-        // mfg_date: medicine.mfg_date || '', // <-- Removed
-        expiry_date: medicine.expiry_date || '', // Handle null expiry date
-        purchase_rate: medicine.purchase_rate?.toString() || '', // Handle null
-        gst: medicine.gst?.toString() || '', // Handle null
-        mrp: medicine.mrp?.toString() || '', // Handle null
-        discount: medicine.discount?.toString() || '', // <-- Populate discount, default to '' if null
-        stock: medicine.stock?.toString() || '0', // Handle null
+        expiry_date: medicine.expiry_date || '',
+        purchase_rate: medicine.purchase_rate?.toString() || '',
+        gst: medicine.gst?.toString() || '',
+        mrp: medicine.mrp?.toString() || '',
+        discount: medicine.discount?.toString() || '',
+        stock: medicine.stock?.toString() || '0',
+        reminder_quantity: medicine.reminder_quantity?.toString() || '5', // Populate reminder, default to '5' if null/undefined
       });
     } else {
-      setFormData(initialFormData);
+      setFormData(initialFormData); // Reset to initial including default reminder
     }
   }, [medicine, open]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Ensure non-negative integers for stock and reminder quantity
+    if ((name === 'stock' || name === 'reminder_quantity') && value !== '' && parseInt(value, 10) < 0) {
+        return; // Prevent negative numbers
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Only one date handler needed now
   const handleDateChange = (e) => {
     setFormData((prev) => ({ ...prev, expiry_date: e.target.value }));
   };
@@ -86,7 +89,7 @@ export default function MedicineModal({ open, medicine, onClose }) {
     setError('');
     setLoading(true);
 
-    // Prepare data without mfg_date, handle potentially empty discount
+    // Prepare data including reminder_quantity
     const data = {
       user_id: user?.id,
       product_name: formData.product_name,
@@ -94,21 +97,18 @@ export default function MedicineModal({ open, medicine, onClose }) {
       batch_no: formData.batch_no,
       no_of_items: formData.no_of_items,
       drug_type: formData.drug_type,
-      // mfg_date: formData.mfg_date || null, // <-- Removed
-      expiry_date: formData.expiry_date || null, // Allow null expiry date if needed
-      purchase_rate: parseFloat(formData.purchase_rate) || 0, // Default to 0 if empty/invalid
-      gst: parseFloat(formData.gst) || 0, // Default to 0 if empty/invalid
-      mrp: parseFloat(formData.mrp) || 0, // Default to 0 if empty/invalid
-      // Send discount as null if the input is empty, otherwise parse float (default to null if invalid)
+      expiry_date: formData.expiry_date || null,
+      purchase_rate: parseFloat(formData.purchase_rate) || 0,
+      gst: parseFloat(formData.gst) || 0,
+      mrp: parseFloat(formData.mrp) || 0,
       discount: formData.discount === '' ? null : (parseFloat(formData.discount) || null),
-      stock: parseInt(formData.stock, 10) || 0, // Default to 0 if empty/invalid
+      stock: parseInt(formData.stock, 10) || 0,
+      reminder_quantity: parseInt(formData.reminder_quantity, 10) || 0, // Add reminder quantity, default 0 if invalid
     };
 
-     // Ensure expiry_date is valid or null before sending
     if (data.expiry_date && isNaN(new Date(data.expiry_date))) {
         data.expiry_date = null;
     }
-
 
     let result;
     if (medicine) {
@@ -161,21 +161,20 @@ export default function MedicineModal({ open, medicine, onClose }) {
               />
             </Grid>
 
-            {/* Row 3 - Expiry Date Only */}
+            {/* Row 3 - Expiry Date & Type */}
              <Grid item xs={12} sm={6}>
                <TextField
                 name="expiry_date"
                 label="Expiry Date"
                 type="date"
                 value={formData.expiry_date}
-                onChange={handleDateChange} // Use date handler
+                onChange={handleDateChange}
                 fullWidth
-                required // Keep required? Or make optional?
+                required
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
-            {/* Removed Mfg Date Field */}
-            <Grid item xs={12} sm={6}> {/* Type */}
+            <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
                     <InputLabel id="drug-type-select-label">Drug Type</InputLabel>
                     <Select
@@ -196,31 +195,42 @@ export default function MedicineModal({ open, medicine, onClose }) {
             </Grid>
 
 
-             {/* Row 4 - Stock & Purchase Rate */}
-            <Grid item xs={12} sm={6}>
+             {/* Row 4 - Stock, Reminder & Purchase Rate */}
+            <Grid item xs={12} sm={4}> {/* Adjusted size */}
               <TextField name="stock" label="Stock (Quantity)" type="number" value={formData.stock} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} />
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField name="purchase_rate" label="Purchase Rate" type="number" value={formData.purchase_rate} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
+            <Grid item xs={12} sm={4}> {/* Added Reminder Field */}
+               <TextField
+                 name="reminder_quantity"
+                 label="Reminder At Qty"
+                 type="number"
+                 value={formData.reminder_quantity}
+                 onChange={handleChange}
+                 fullWidth
+                 required
+                 inputProps={{ step: "1", min: "0" }}
+               />
+            </Grid>
+            <Grid item xs={12} sm={4}> {/* Adjusted size */}
+              <TextField name="purchase_rate" label="Purchase Rate" type="number" value={formData.purchase_rate} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
 
              {/* Row 5 - Pricing */}
             <Grid item xs={12} sm={4}>
-              <TextField name="mrp" label="MRP" type="number" value={formData.mrp} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
+              <TextField name="mrp" label="MRP" type="number" value={formData.mrp} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <TextField name="gst" label="GST (%)" type="number" value={formData.gst} onChange={handleChange} fullWidth required inputProps={{ step: "0.01" }} />
+              <TextField name="gst" label="GST (%)" type="number" value={formData.gst} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
             <Grid item xs={12} sm={4}>
                <TextField
                  name="discount"
-                 label="Discount (%)" // Label remains same
+                 label="Discount (%)"
                  type="number"
-                 value={formData.discount} // Value reads from state (now defaults to '')
+                 value={formData.discount}
                  onChange={handleChange}
                  fullWidth
-                 // required // Make it NOT required
-                 InputProps={{ // Keep input props for decimals/min
+                 InputProps={{
                      inputProps: { step: "0.01", min: "0.00" }
                  }}
                />

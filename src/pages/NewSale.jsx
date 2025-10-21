@@ -32,7 +32,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import Layout from '../components/Layout';
 import InvoiceModal from '../components/InvoiceModal';
 
-// --- Calculation Helper ---
+// --- Calculation Helper (remains the same) ---
 const calculateItemAmounts = (mrp, gst, discount, quantity, extraDiscountType, extraDiscountValue) => {
     const mrpNum = parseFloat(mrp) || 0;
     const gstNum = parseFloat(gst) || 0;
@@ -68,16 +68,16 @@ const calculateItemAmounts = (mrp, gst, discount, quantity, extraDiscountType, e
     const finalSubtotal = Math.max(0, finalPricePerItem * qtyNum);
 
     return {
-        subtotal: (basePrice + gstPerItem - standardDiscountPerItem) * qtyNum, // Subtotal before extra discount is applied
+        subtotal: (basePrice + gstPerItem - standardDiscountPerItem) * qtyNum,
         gstAmount: totalGstAmount,
-        discountAmount: totalStandardDiscountAmount, // Standard discount amount
-        extraDiscountAmount: totalExtraDiscountAmount, // Extra discount amount
-        finalSubtotal: finalSubtotal, // Final amount including extra discount
+        discountAmount: totalStandardDiscountAmount,
+        extraDiscountAmount: totalExtraDiscountAmount,
+        finalSubtotal: finalSubtotal,
     };
 };
 // -----------------------
 
-// --- CSS styles to hide number input spinners ---
+// --- CSS styles to hide number input spinners (remains the same) ---
 const numberInputStyles = {
   // Hide spinners for WebKit browsers (Chrome, Safari, Edge)
   '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': {
@@ -108,31 +108,31 @@ export default function NewSale() {
   const [extraDiscountType, setExtraDiscountType] = useState('percent');
   const [extraDiscountValue, setExtraDiscountValue] = useState('');
 
+  // --- fetchMedicines, showSnackbar, handleSnackbarClose remain the same ---
   const fetchMedicines = useCallback(async () => {
      const { data, error } = await supabase
       .from('medicines')
-      .select('id, product_name, batch_no, expiry_date, mrp, stock, gst, discount'); // Select needed fields
+      .select('id, product_name, batch_no, expiry_date, mrp, stock, gst, discount');
 
     if(error){
         showSnackbar("Error fetching medicine list.", "error");
         console.error("Fetch Medicines Error:", error);
-        return []; // Return empty array on error
+        return [];
     } else if (data) {
-        data.sort((a, b) => a.product_name.localeCompare(b.product_name)); // Sort alphabetically
+        data.sort((a, b) => a.product_name.localeCompare(b.product_name));
         setMedicines(data);
-        return data; // Return fetched data
+        return data;
     } else {
         setMedicines([]);
-        return []; // Return empty array if no data
+        return [];
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Dependencies remain empty as showSnackbar might cause loops if included
+  }, []);
 
   useEffect(() => {
     fetchMedicines();
   }, [fetchMedicines]);
 
-  // Snackbar handler functions
   const showSnackbar = (message, severity = 'info') => {
       setSnackbarMessage(message);
       setSnackbarSeverity(severity);
@@ -142,18 +142,17 @@ export default function NewSale() {
       if (reason === 'clickaway') { return; }
       setSnackbarOpen(false);
    };
+  // --- ---
 
-   // Add item to the bill logic
+  // --- handleAddItem, handleRemoveItem remain the same ---
    const handleAddItem = () => {
     const qtyToAdd = parseInt(quantity, 10);
-    const extraDiscValNum = parseFloat(extraDiscountValue) || 0; // Default to 0 if empty/invalid
+    const extraDiscValNum = parseFloat(extraDiscountValue) || 0;
 
-    // Basic validation
     if (!selectedMedicine || isNaN(qtyToAdd) || qtyToAdd <= 0) {
         showSnackbar("Please select a medicine and enter a valid positive quantity.", "warning");
         return;
     };
-    // Extra discount validation (only if value > 0)
     if (extraDiscValNum < 0) {
         showSnackbar("Extra discount value cannot be negative.", "warning");
         return;
@@ -167,14 +166,11 @@ export default function NewSale() {
         return;
     }
 
-
-    // Stock validation
     const availableStock = selectedMedicine.stock ?? 0;
-    // Check if an *identical* item (including extra discount) is already in the bill to potentially merge quantities
     const existingItemIndex = billItems.findIndex(
         (item) =>
             item.medicine_id === selectedMedicine.id &&
-            item.extraDiscountType === (extraDiscValNum > 0 ? extraDiscountType : null) && // Only match type if value > 0
+            item.extraDiscountType === (extraDiscValNum > 0 ? extraDiscountType : null) &&
             item.extraDiscountValue === extraDiscValNum
     );
 
@@ -182,7 +178,6 @@ export default function NewSale() {
     if (existingItemIndex > -1) {
         quantityAlreadyInBill = billItems[existingItemIndex].quantity;
     } else {
-        // If not merging, check total quantity of this medicine_id across all bill items
         quantityAlreadyInBill = billItems
             .filter(item => item.medicine_id === selectedMedicine.id)
             .reduce((sum, item) => sum + item.quantity, 0);
@@ -194,38 +189,31 @@ export default function NewSale() {
         return;
     }
 
-    // --- Calculate amounts including extra discount ---
     const amounts = calculateItemAmounts(
         selectedMedicine.mrp,
         selectedMedicine.gst,
-        selectedMedicine.discount, // Standard discount from medicine data
+        selectedMedicine.discount,
         qtyToAdd,
-        extraDiscValNum > 0 ? extraDiscountType : null, // Pass type only if value > 0
+        extraDiscValNum > 0 ? extraDiscountType : null,
         extraDiscValNum
     );
-    // --- ---
 
     if (existingItemIndex > -1) {
-        // Merge with existing identical item
         const updatedItems = [...billItems];
         const existingItem = updatedItems[existingItemIndex];
         const newQuantity = existingItem.quantity + qtyToAdd;
-        // Recalculate amounts for the new total quantity
         const newAmounts = calculateItemAmounts(
             existingItem.mrp, existingItem.gst, existingItem.discount, newQuantity,
             existingItem.extraDiscountType, existingItem.extraDiscountValue
         );
-
         existingItem.quantity = newQuantity;
-        existingItem.subtotal = newAmounts.subtotal; // Subtotal before extra disc
+        existingItem.subtotal = newAmounts.subtotal;
         existingItem.gstAmount = newAmounts.gstAmount;
-        existingItem.discountAmount = newAmounts.discountAmount; // Standard disc amount
-        existingItem.extraDiscountAmount = newAmounts.extraDiscountAmount; // Extra disc amount
-        existingItem.finalSubtotal = newAmounts.finalSubtotal; // Final amount for the line
-
+        existingItem.discountAmount = newAmounts.discountAmount;
+        existingItem.extraDiscountAmount = newAmounts.extraDiscountAmount;
+        existingItem.finalSubtotal = newAmounts.finalSubtotal;
         setBillItems(updatedItems);
     } else {
-        // Add as a new line item
         const newItem = {
            medicine_id: selectedMedicine.id,
            product_name: selectedMedicine.product_name,
@@ -233,42 +221,39 @@ export default function NewSale() {
            expiry_date: selectedMedicine.expiry_date,
            mrp: selectedMedicine.mrp,
            gst: selectedMedicine.gst ?? 0,
-           discount: selectedMedicine.discount ?? 0, // Standard discount %
+           discount: selectedMedicine.discount ?? 0,
            quantity: qtyToAdd,
-           subtotal: amounts.subtotal, // Subtotal before extra discount
+           subtotal: amounts.subtotal,
            gstAmount: amounts.gstAmount,
-           discountAmount: amounts.discountAmount, // Standard discount amount
-           // Store extra discount details only if a value was entered
+           discountAmount: amounts.discountAmount,
            extraDiscountType: extraDiscValNum > 0 ? extraDiscountType : null,
            extraDiscountValue: extraDiscValNum > 0 ? extraDiscValNum : 0,
-           extraDiscountAmount: amounts.extraDiscountAmount, // Calculated extra discount amount
-           finalSubtotal: amounts.finalSubtotal, // Final amount for this item line
+           extraDiscountAmount: amounts.extraDiscountAmount,
+           finalSubtotal: amounts.finalSubtotal,
         };
         setBillItems([...billItems, newItem]);
     }
 
-    // Reset inputs
     setSelectedMedicine(null);
     setQuantity('');
-    setExtraDiscountType('percent'); // Reset type to default
-    setExtraDiscountValue(''); // Reset value
+    setExtraDiscountType('percent');
+    setExtraDiscountValue('');
   };
 
-   // Remove item from bill
-   const handleRemoveItem = (index) => {
+  const handleRemoveItem = (index) => {
       setBillItems(billItems.filter((_, i) => i !== index));
    };
+  // --- ---
 
-    // Calculate totals
+  // --- Total calculations remain the same ---
     const grandTotal = billItems.reduce((total, item) => total + item.finalSubtotal, 0);
     const totalStandardDiscount = billItems.reduce((total, item) => total + item.discountAmount, 0);
     const totalExtraDiscount = billItems.reduce((total, item) => total + item.extraDiscountAmount, 0);
-    const totalDiscount = totalStandardDiscount + totalExtraDiscount; // Combined total discount
+    const totalDiscount = totalStandardDiscount + totalExtraDiscount;
+  // --- ---
 
-
-   // Generate Bill and Update Stock
+  // --- handleGenerateBill and handleCloseInvoice remain the same (with previous fix) ---
    const handleGenerateBill = async () => {
-    // --- Validation ---
     if (billItems.length === 0) {
       showSnackbar('Please add at least one item to the bill.', "warning");
       return;
@@ -278,18 +263,14 @@ export default function NewSale() {
         return;
     }
 
-     // --- Fetch FRESH stock data right before checking ---
      const currentMedicinesData = await fetchMedicines();
      if (!currentMedicinesData || currentMedicinesData.length === 0) {
          showSnackbar("Could not verify current stock levels. Please try again.", "error");
-         return; // Stop if we can't get fresh data
+         return;
      }
-     // --- ---
 
-    // --- Stock re-check (using FRESH data) ---
     let stockSufficient = true;
     const stockMap = billItems.reduce((map, item) => {
-        // Ensure item.medicine_id is consistently treated (e.g., always string if UUID)
         const key = String(item.medicine_id);
         map[key] = (map[key] || 0) + item.quantity;
         return map;
@@ -297,52 +278,38 @@ export default function NewSale() {
 
 
     for (const medicineId in stockMap) {
-        // --- CORRECTED LINE ---
-        // Compare IDs as strings (assuming Supabase ID is UUID or text)
-        const med = currentMedicinesData.find(m => String(m.id) === String(medicineId));
-        // --- END CORRECTED LINE ---
-
+        const med = currentMedicinesData.find(m => String(m.id) === String(medicineId)); // Use string comparison
         const requiredQty = stockMap[medicineId];
-        const currentStock = med?.stock ?? 0; // Get stock from fresh data
+        const currentStock = med?.stock ?? 0;
 
         if (!med || currentStock < requiredQty) {
-            // Update error message to show the stock level found *during this check*
             showSnackbar(`Stock changed for ${med?.product_name || `ID ${medicineId}`}. Only ${currentStock} available, ${requiredQty} required in bill.`, "error");
             stockSufficient = false;
             break;
         }
     }
-     // If stock is insufficient based on the *fresh* data, stop.
      if (!stockSufficient) { return; }
-     // --- End Stock Re-check ---
 
     const billNumber = `BILL-${Date.now()}`;
 
     try {
-        // 1. Create the sale record
         const { data: saleData, error: saleError } = await supabase
           .from('sales')
           .insert([ {
               user_id: user.id,
               bill_number: billNumber,
-              customer_name: 'Walk-in', // Default customer name
-              customer_phone: customerPhone, // Use state value
+              customer_name: 'Walk-in',
+              customer_phone: customerPhone,
               grand_total: grandTotal,
               sale_date: new Date().toISOString(),
             },
           ])
-          .select().single(); // Use select().single() to get the inserted row back
+          .select().single();
 
-        if (saleError) {
-          console.error("Sale Record Error:", saleError);
-          throw new Error(`Error creating sale record: ${saleError.message}`);
-        }
-        if (!saleData) {
-            throw new Error('Failed to create sale record, no data returned.');
-        }
+        if (saleError) throw new Error(`Error creating sale record: ${saleError.message}`);
+        if (!saleData) throw new Error('Failed to create sale record, no data returned.');
 
 
-        // 2. Create the sale_items records
         const saleItemsData = billItems.map((item) => ({
             sale_id: saleData.id,
             medicine_id: item.medicine_id,
@@ -351,85 +318,55 @@ export default function NewSale() {
             expiry_date: item.expiry_date,
             mrp: item.mrp,
             quantity: item.quantity,
-            subtotal: item.finalSubtotal, // Store the final line item price
+            subtotal: item.finalSubtotal,
             extra_discount_type: item.extraDiscountType,
             extra_discount_value: item.extraDiscountValue,
             extra_discount_amount: item.extraDiscountAmount,
          }));
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
 
-        if (itemsError) {
-            console.error("Sale Items Error:", itemsError);
-            // Consider rolling back the sale entry if items fail? (More complex logic)
-            throw new Error(`Error saving sale items: ${itemsError.message}`);
-        }
+        if (itemsError) throw new Error(`Error saving sale items: ${itemsError.message}`);
 
-        // --- 3. Update stock for each medicine sold ---
         const stockUpdatePromises = Object.entries(stockMap).map(([medicineIdStr, quantitySold]) => {
-            // --- Ensure ID matching for update uses the correct type ---
             const originalMedicine = currentMedicinesData.find(med => String(med.id) === String(medicineIdStr));
-            // ---
-
             if (!originalMedicine) {
-                // This shouldn't happen if the stock check passed, but handle defensively
                 console.error(`Medicine with ID ${medicineIdStr} not found in fresh data for stock update.`);
-                // Decide how to handle this: throw error, log, or continue?
-                // For now, let's resolve with an error indicator
-                return Promise.resolve({ error: { message: `Medicine ID ${medicineIdStr} not found for stock update.`} });
+                return Promise.resolve({ error: { message: `Medicine ID ${medicineIdStr} not found.`} });
             }
             const newStock = (originalMedicine.stock ?? 0) - quantitySold;
-
-            // --- Use the original ID from originalMedicine for the update query ---
             return supabase
                 .from('medicines')
-                .update({ stock: Math.max(0, newStock) }) // Prevent negative stock
-                .eq('id', originalMedicine.id); // Use the correct ID type
-            // ---
+                .update({ stock: Math.max(0, newStock) })
+                .eq('id', originalMedicine.id); // Use correct ID type
         });
 
-
         const stockUpdateResults = await Promise.all(stockUpdatePromises);
-
-        // Check if any stock update failed
         const stockUpdateError = stockUpdateResults.find(result => result && result.error);
         if (stockUpdateError) {
-            // Log the specific error for debugging
             console.error("Stock update error details:", stockUpdateError.error);
-            // Inform the user, but maybe the sale record itself was successful
-            // This requires careful consideration of transactionality (which Supabase doesn't easily offer across tables)
             throw new Error(`Sale recorded, but failed to update stock for one or more items. Please check inventory manually. Error: ${stockUpdateError.error.message}`);
         }
-        // --- End of stock update ---
 
         showSnackbar("Sale recorded and stock updated successfully!", "success");
-        setSaleId(saleData.id); // Set the ID for the modal
-        setShowInvoice(true); // Open the modal
-
-        // Clear the form AFTER successful operation
-        // setBillItems([]); // Moved to handleCloseInvoice
-        // setCustomerPhone(''); // Moved to handleCloseInvoice
-        // fetchMedicines(); // Moved to handleCloseInvoice
+        setSaleId(saleData.id);
+        setShowInvoice(true);
 
     } catch (error) {
-        // Catch errors from sale insert, items insert, or stock update
         console.error("Bill Generation/Stock Update Error:", error);
         showSnackbar(error.message || 'An unexpected error occurred during bill generation.', "error");
-        // Do NOT clear the bill here, allow the user to retry or adjust
     }
-  }; // <-- End of handleGenerateBill
+  };
 
-
-  // Close invoice modal and reset state
   const handleCloseInvoice = () => {
     setShowInvoice(false);
     setSaleId(null);
     setBillItems([]);
     setCustomerPhone('');
-    setExtraDiscountType('percent'); // Reset extra discount state
+    setExtraDiscountType('percent');
     setExtraDiscountValue('');
-    fetchMedicines(); // Refetch medicines to update Autocomplete state
+    fetchMedicines();
   };
-
+  // --- ---
 
   return (
     <Layout>
@@ -444,7 +381,7 @@ export default function NewSale() {
               <Typography variant="h6" sx={{ mb: 1 }}>Add Item to Bill</Typography>
           </Grid>
 
-          {/* === START: New Grid Layout for Add Item section === */}
+          {/* === START: MODIFIED Grid Layout for Add Item section === */}
 
           {/* Row 1: Search Product (Full Width) */}
           <Grid item xs={12}>
@@ -470,31 +407,30 @@ export default function NewSale() {
                 ListboxProps={{ style: { maxHeight: 300 } }}
                 getOptionDisabled={(option) => (option.stock ?? 0) <= 0}
                 size="small"
+                sx={{ mb: 1 }} // Add margin below Autocomplete
               />
+
+              {/* Info Box - Moved Directly Below Autocomplete */}
+              <Paper variant="outlined" sx={{ p: '6px 14px', height: '40px', bgcolor: 'background.paper', display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }} noWrap>
+                      {selectedMedicine
+                          ? `Stock: ${selectedMedicine.stock ?? 'N/A'} | MRP: ₹${selectedMedicine.mrp?.toFixed(2)} | Batch: ${selectedMedicine.batch_no}`
+                          : 'Select a product from the list above.'
+                      }
+                  </Typography>
+              </Paper>
           </Grid>
 
-           {/* Row 2: Info Text, Qty, Disc Type, Value, Add Button */}
-           <Grid item container spacing={2} xs={12} alignItems="center">
-               {/* Info text / Selected Medicine Box */}
-               {/* This now sits below the other controls on smaller screens */}
-               <Grid item xs={12} sm={12} md={7} order={{ xs: 5, sm: 1 }}> {/* Order last on xs, first on sm+ */}
-                   <Paper variant="outlined" sx={{ p: '6px 14px', height: '40px', bgcolor: 'background.paper', display: 'flex', alignItems: 'center', mt: { xs: 1, sm: 0 } }}>
-                       <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }} noWrap>
-                            {selectedMedicine
-                                ? `Stock: ${selectedMedicine.stock ?? 'N/A'} | MRP: ₹${selectedMedicine.mrp?.toFixed(2)} | Batch: ${selectedMedicine.batch_no}`
-                                : 'Select a product from the list above.'
-                            }
-                        </Typography>
-                   </Paper>
-               </Grid>
+           {/* Row 2: Qty, Disc Type, Value, Add Button (Now below the info box) */}
+           <Grid item container spacing={2} xs={12} alignItems="center" sx={{ mt: 1 }}> {/* Add margin top */}
 
-               {/* Quantity - Small */}
-               <Grid item xs={4} sm={3} md={1} order={{ xs: 1, sm: 2 }}> {/* Order first on xs */}
+               {/* Quantity - Adjusted Grid size */}
+               <Grid item xs={4} sm={3} md={2} lg={1}>
                   <TextField label="Qty" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} InputProps={{ inputProps: { min: "1" } }} fullWidth required variant="outlined" size="small" sx={numberInputStyles}/>
                </Grid>
 
-               {/* Extra Discount Type - Small */}
-               <Grid item xs={4} sm={3} md={1} order={{ xs: 2, sm: 3 }}> {/* Order second on xs */}
+               {/* Extra Discount Type - Adjusted Grid size */}
+               <Grid item xs={4} sm={3} md={2} lg={1}>
                    <FormControl fullWidth size="small">
                        <InputLabel id="extra-discount-type-label">Disc Type</InputLabel>
                        <Select
@@ -509,8 +445,8 @@ export default function NewSale() {
                    </FormControl>
                </Grid>
 
-               {/* Extra Discount Value - Small */}
-               <Grid item xs={4} sm={3} md={1} order={{ xs: 3, sm: 4 }}> {/* Order third on xs */}
+               {/* Extra Discount Value - Adjusted Grid size */}
+               <Grid item xs={4} sm={3} md={2} lg={1}>
                    <TextField
                        label="Value"
                        type="number"
@@ -528,8 +464,8 @@ export default function NewSale() {
                    />
                </Grid>
 
-                {/* Add Button */}
-                <Grid item xs={12} sm={3} md={2} sx={{ display: 'flex', alignItems: 'stretch' }} order={{ xs: 4, sm: 5 }}> {/* Order fourth on xs */}
+                {/* Add Button - Adjusted Grid size and alignment */}
+                <Grid item xs={12} sm={3} md={2} lg={2} sx={{ display: 'flex', alignItems: 'stretch' }}>
                     <Button
                     variant="contained"
                     color="success"
@@ -542,14 +478,18 @@ export default function NewSale() {
                     > Add Item </Button>
                 </Grid>
 
+                {/* Optional Spacer Grid item if needed for alignment on larger screens */}
+                <Grid item md={4} lg={7} sx={{ display: { xs: 'none', md: 'block' } }} />
+
            </Grid> {/* End of Row 2 Grid */}
 
-           {/* === END: New Grid Layout === */}
+           {/* === END: MODIFIED Grid Layout === */}
 
            <Grid item xs={12}><Divider sx={{ my: 2 }} /></Grid>
 
+           {/* --- Current Bill Table, Customer Details, Totals (remain the same) --- */}
            {/* Row: Current Bill Table */}
-           <Grid item xs={12}>
+            <Grid item xs={12}>
              <Typography variant="h6" sx={{ mb: 1 }}>Current Bill</Typography>
              <TableContainer component={Paper} variant="outlined">
                <Table size="small" sx={{ minWidth: 950 }}> {/* Adjust minWidth as needed */}
@@ -615,11 +555,10 @@ export default function NewSale() {
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   fullWidth
                   required
-                  type="tel" // Use tel type for better mobile input
-                  inputProps={{ maxLength: 15 }} // Optional: Limit length
+                  type="tel"
+                  inputProps={{ maxLength: 15 }}
                 />
               </Grid>
-              {/* Empty grid item to push total to the right on larger screens */}
                <Grid item xs={false} md={6} />
             </>
           )}
@@ -645,17 +584,18 @@ export default function NewSale() {
                   size="large"
                   startIcon={<PrintIcon />}
                   onClick={handleGenerateBill}
-                  sx={{ width: { xs: '100%', sm: 'auto' }}} // Full width on small screens
+                  sx={{ width: { xs: '100%', sm: 'auto' }}}
               >
                  Generate & Print Bill
               </Button>
             </Grid>
           )}
+          {/* --- --- */}
 
         </Grid> {/* End of main container grid */}
       </Paper>
 
-      {/* --- Snackbar & Invoice Modal --- */}
+      {/* --- Snackbar & Invoice Modal (remain the same) --- */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={6000}
@@ -667,7 +607,6 @@ export default function NewSale() {
         </Alert>
       </Snackbar>
 
-      {/* Conditionally render InvoiceModal only when showInvoice and saleId are true */}
       {showInvoice && saleId && (
         <InvoiceModal
             open={showInvoice}
@@ -675,6 +614,7 @@ export default function NewSale() {
             onClose={handleCloseInvoice}
         />
       )}
+      {/* --- --- */}
 
     </Layout>
   );
