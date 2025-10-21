@@ -32,7 +32,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import Layout from '../components/Layout';
 import InvoiceModal from '../components/InvoiceModal';
 
-// --- Calculation Helper (remains the same) ---
+// --- Calculation Helper ---
 const calculateItemAmounts = (mrp, gst, discount, quantity, extraDiscountType, extraDiscountValue) => {
     const mrpNum = parseFloat(mrp) || 0;
     const gstNum = parseFloat(gst) || 0;
@@ -68,16 +68,16 @@ const calculateItemAmounts = (mrp, gst, discount, quantity, extraDiscountType, e
     const finalSubtotal = Math.max(0, finalPricePerItem * qtyNum);
 
     return {
-        subtotal: (basePrice + gstPerItem - standardDiscountPerItem) * qtyNum,
+        subtotal: (basePrice + gstPerItem - standardDiscountPerItem) * qtyNum, // Subtotal before extra discount is applied
         gstAmount: totalGstAmount,
-        discountAmount: totalStandardDiscountAmount,
-        extraDiscountAmount: totalExtraDiscountAmount,
-        finalSubtotal: finalSubtotal,
+        discountAmount: totalStandardDiscountAmount, // Standard discount amount
+        extraDiscountAmount: totalExtraDiscountAmount, // Extra discount amount
+        finalSubtotal: finalSubtotal, // Final amount including extra discount
     };
 };
 // -----------------------
 
-// --- CSS styles to hide number input spinners (remains the same) ---
+// --- CSS styles to hide number input spinners ---
 const numberInputStyles = {
   // Hide spinners for WebKit browsers (Chrome, Safari, Edge)
   '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': {
@@ -109,23 +109,30 @@ export default function NewSale() {
   const [extraDiscountValue, setExtraDiscountValue] = useState('');
 
   const fetchMedicines = useCallback(async () => {
-    // ... (fetch logic remains the same)
      const { data, error } = await supabase
       .from('medicines')
-      .select('id, product_name, batch_no, expiry_date, mrp, stock, gst, discount');
+      .select('id, product_name, batch_no, expiry_date, mrp, stock, gst, discount'); // Select needed fields
 
-    if(error){ showSnackbar("Error fetching medicine list.", "error"); return []; } // Added return []
-    else if (data) {
-        data.sort((a, b) => a.product_name.localeCompare(b.product_name));
+    if(error){
+        showSnackbar("Error fetching medicine list.", "error");
+        console.error("Fetch Medicines Error:", error);
+        return []; // Return empty array on error
+    } else if (data) {
+        data.sort((a, b) => a.product_name.localeCompare(b.product_name)); // Sort alphabetically
         setMedicines(data);
-        return data; // Return data
-    } else { setMedicines([]); return []; } // Added return []
+        return data; // Return fetched data
+    } else {
+        setMedicines([]);
+        return []; // Return empty array if no data
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Dependencies remain empty as showSnackbar might cause loops if included
 
-  useEffect(() => { fetchMedicines(); }, [fetchMedicines]);
+  useEffect(() => {
+    fetchMedicines();
+  }, [fetchMedicines]);
 
-  // ... (showSnackbar, handleSnackbarClose remain the same)
+  // Snackbar handler functions
   const showSnackbar = (message, severity = 'info') => {
       setSnackbarMessage(message);
       setSnackbarSeverity(severity);
@@ -136,7 +143,7 @@ export default function NewSale() {
       setSnackbarOpen(false);
    };
 
-  // ... (handleAddItem remains the same) ...
+   // Add item to the bill logic
    const handleAddItem = () => {
     const qtyToAdd = parseInt(quantity, 10);
     const extraDiscValNum = parseFloat(extraDiscountValue) || 0; // Default to 0 if empty/invalid
@@ -247,20 +254,21 @@ export default function NewSale() {
     setExtraDiscountValue(''); // Reset value
   };
 
-  // ... (handleRemoveItem remains the same) ...
-  const handleRemoveItem = (index) => {
+   // Remove item from bill
+   const handleRemoveItem = (index) => {
       setBillItems(billItems.filter((_, i) => i !== index));
    };
 
-  // ... (Total calculations remain the same) ...
+    // Calculate totals
     const grandTotal = billItems.reduce((total, item) => total + item.finalSubtotal, 0);
     const totalStandardDiscount = billItems.reduce((total, item) => total + item.discountAmount, 0);
     const totalExtraDiscount = billItems.reduce((total, item) => total + item.extraDiscountAmount, 0);
     const totalDiscount = totalStandardDiscount + totalExtraDiscount; // Combined total discount
 
-  // ... (handleGenerateBill updated with fresh stock check - remains the same as last update) ...
+
+   // Generate Bill and Update Stock
    const handleGenerateBill = async () => {
-    // --- Validation (remains the same) ---
+    // --- Validation ---
     if (billItems.length === 0) {
       showSnackbar('Please add at least one item to the bill.', "warning");
       return;
@@ -281,13 +289,19 @@ export default function NewSale() {
     // --- Stock re-check (using FRESH data) ---
     let stockSufficient = true;
     const stockMap = billItems.reduce((map, item) => {
-        map[item.medicine_id] = (map[item.medicine_id] || 0) + item.quantity;
+        // Ensure item.medicine_id is consistently treated (e.g., always string if UUID)
+        const key = String(item.medicine_id);
+        map[key] = (map[key] || 0) + item.quantity;
         return map;
     }, {});
 
+
     for (const medicineId in stockMap) {
-        // Use currentMedicinesData for the check
-        const med = currentMedicinesData.find(m => m.id === parseInt(medicineId, 10));
+        // --- CORRECTED LINE ---
+        // Compare IDs as strings (assuming Supabase ID is UUID or text)
+        const med = currentMedicinesData.find(m => String(m.id) === String(medicineId));
+        // --- END CORRECTED LINE ---
+
         const requiredQty = stockMap[medicineId];
         const currentStock = med?.stock ?? 0; // Get stock from fresh data
 
@@ -305,23 +319,30 @@ export default function NewSale() {
     const billNumber = `BILL-${Date.now()}`;
 
     try {
-        // 1. Create the sale record (remains the same)
+        // 1. Create the sale record
         const { data: saleData, error: saleError } = await supabase
           .from('sales')
           .insert([ {
               user_id: user.id,
               bill_number: billNumber,
-              customer_name: 'Walk-in',
-              customer_phone: customerPhone,
+              customer_name: 'Walk-in', // Default customer name
+              customer_phone: customerPhone, // Use state value
               grand_total: grandTotal,
               sale_date: new Date().toISOString(),
             },
           ])
-          .select().single();
+          .select().single(); // Use select().single() to get the inserted row back
 
-        if (saleError) { throw new Error(`Error creating sale record: ${saleError.message}`); }
+        if (saleError) {
+          console.error("Sale Record Error:", saleError);
+          throw new Error(`Error creating sale record: ${saleError.message}`);
+        }
+        if (!saleData) {
+            throw new Error('Failed to create sale record, no data returned.');
+        }
 
-        // 2. Create the sale_items records (include extra discount fields)
+
+        // 2. Create the sale_items records
         const saleItemsData = billItems.map((item) => ({
             sale_id: saleData.id,
             medicine_id: item.medicine_id,
@@ -330,51 +351,75 @@ export default function NewSale() {
             expiry_date: item.expiry_date,
             mrp: item.mrp,
             quantity: item.quantity,
-            subtotal: item.finalSubtotal,
+            subtotal: item.finalSubtotal, // Store the final line item price
             extra_discount_type: item.extraDiscountType,
             extra_discount_value: item.extraDiscountValue,
             extra_discount_amount: item.extraDiscountAmount,
          }));
         const { error: itemsError } = await supabase.from('sale_items').insert(saleItemsData);
 
-        if (itemsError) { throw new Error(`Error saving sale items: ${itemsError.message}`); }
+        if (itemsError) {
+            console.error("Sale Items Error:", itemsError);
+            // Consider rolling back the sale entry if items fail? (More complex logic)
+            throw new Error(`Error saving sale items: ${itemsError.message}`);
+        }
 
-        // --- 3. Update stock for each medicine sold (using stockMap and FRESH data for calculation) ---
+        // --- 3. Update stock for each medicine sold ---
         const stockUpdatePromises = Object.entries(stockMap).map(([medicineIdStr, quantitySold]) => {
-            const medicineId = parseInt(medicineIdStr, 10);
-            const originalMedicine = currentMedicinesData.find(med => med.id === medicineId);
+            // --- Ensure ID matching for update uses the correct type ---
+            const originalMedicine = currentMedicinesData.find(med => String(med.id) === String(medicineIdStr));
+            // ---
+
             if (!originalMedicine) {
-                console.error(`Medicine with ID ${medicineId} not found in fresh data for stock update.`);
-                return Promise.resolve({ error: { message: `Medicine ID ${medicineId} not found.`} }); // Indicate error
+                // This shouldn't happen if the stock check passed, but handle defensively
+                console.error(`Medicine with ID ${medicineIdStr} not found in fresh data for stock update.`);
+                // Decide how to handle this: throw error, log, or continue?
+                // For now, let's resolve with an error indicator
+                return Promise.resolve({ error: { message: `Medicine ID ${medicineIdStr} not found for stock update.`} });
             }
             const newStock = (originalMedicine.stock ?? 0) - quantitySold;
 
+            // --- Use the original ID from originalMedicine for the update query ---
             return supabase
                 .from('medicines')
-                .update({ stock: Math.max(0, newStock) })
-                .eq('id', medicineId);
+                .update({ stock: Math.max(0, newStock) }) // Prevent negative stock
+                .eq('id', originalMedicine.id); // Use the correct ID type
+            // ---
         });
 
 
         const stockUpdateResults = await Promise.all(stockUpdatePromises);
 
+        // Check if any stock update failed
         const stockUpdateError = stockUpdateResults.find(result => result && result.error);
         if (stockUpdateError) {
+            // Log the specific error for debugging
             console.error("Stock update error details:", stockUpdateError.error);
-            throw new Error(`Failed to update stock for one or more items. Please check inventory manually.`);
+            // Inform the user, but maybe the sale record itself was successful
+            // This requires careful consideration of transactionality (which Supabase doesn't easily offer across tables)
+            throw new Error(`Sale recorded, but failed to update stock for one or more items. Please check inventory manually. Error: ${stockUpdateError.error.message}`);
         }
         // --- End of stock update ---
 
         showSnackbar("Sale recorded and stock updated successfully!", "success");
-        setSaleId(saleData.id);
-        setShowInvoice(true);
+        setSaleId(saleData.id); // Set the ID for the modal
+        setShowInvoice(true); // Open the modal
+
+        // Clear the form AFTER successful operation
+        // setBillItems([]); // Moved to handleCloseInvoice
+        // setCustomerPhone(''); // Moved to handleCloseInvoice
+        // fetchMedicines(); // Moved to handleCloseInvoice
 
     } catch (error) {
+        // Catch errors from sale insert, items insert, or stock update
+        console.error("Bill Generation/Stock Update Error:", error);
         showSnackbar(error.message || 'An unexpected error occurred during bill generation.', "error");
+        // Do NOT clear the bill here, allow the user to retry or adjust
     }
-  };
+  }; // <-- End of handleGenerateBill
 
-  // ... (handleCloseInvoice remains the same) ...
+
+  // Close invoice modal and reset state
   const handleCloseInvoice = () => {
     setShowInvoice(false);
     setSaleId(null);
@@ -388,7 +433,9 @@ export default function NewSale() {
 
   return (
     <Layout>
-      <Typography variant="h4" component="h1" sx={{ mb: 3 }}> New Sale </Typography>
+      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+        New Sale
+      </Typography>
 
       <Paper sx={{ p: 3 }}>
         <Grid container spacing={2}> {/* Main Container */}
@@ -502,30 +549,33 @@ export default function NewSale() {
            <Grid item xs={12}><Divider sx={{ my: 2 }} /></Grid>
 
            {/* Row: Current Bill Table */}
-           {/* ... (Table content remains the same) ... */}
-            <Grid item xs={12}>
+           <Grid item xs={12}>
              <Typography variant="h6" sx={{ mb: 1 }}>Current Bill</Typography>
              <TableContainer component={Paper} variant="outlined">
-               <Table size="small" sx={{ minWidth: 950 }}>
+               <Table size="small" sx={{ minWidth: 950 }}> {/* Adjust minWidth as needed */}
                  <TableHead sx={{ bgcolor: 'grey.100' }}>
                    <TableRow>
-                     <TableCell>Product</TableCell>
-                     <TableCell>Batch</TableCell>
-                     <TableCell>MRP</TableCell>
-                     <TableCell>Std Disc</TableCell>
-                     <TableCell>Extra Disc</TableCell>
-                     <TableCell>GST Amt</TableCell>
-                     <TableCell align="right">Qty</TableCell>
-                     <TableCell align="right">Amount</TableCell>
-                     <TableCell align="right">Action</TableCell>
+                     <TableCell sx={{ minWidth: 150 }}>Product</TableCell>
+                     <TableCell sx={{ minWidth: 80 }}>Batch</TableCell>
+                     <TableCell sx={{ minWidth: 70 }}>MRP</TableCell>
+                     <TableCell sx={{ minWidth: 100 }}>Std Disc</TableCell>
+                     <TableCell sx={{ minWidth: 100 }}>Extra Disc</TableCell>
+                     <TableCell sx={{ minWidth: 100 }}>GST Amt</TableCell>
+                     <TableCell align="right" sx={{ minWidth: 50 }}>Qty</TableCell>
+                     <TableCell align="right" sx={{ minWidth: 90 }}>Amount</TableCell>
+                     <TableCell align="right" sx={{ minWidth: 60 }}>Action</TableCell>
                    </TableRow>
                  </TableHead>
                  <TableBody>
                    {billItems.length === 0 ? (
-                    <TableRow> <TableCell colSpan={9} align="center"> No items added to bill </TableCell> </TableRow>
+                    <TableRow>
+                        <TableCell colSpan={9} align="center" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                            No items added to bill
+                        </TableCell>
+                    </TableRow>
                    ) : (
                     billItems.map((item, index) => (
-                      <TableRow key={index} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                      <TableRow key={`${item.medicine_id}-${item.batch_no}-${index}`} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                          <TableCell component="th" scope="row">{item.product_name}</TableCell>
                          <TableCell>{item.batch_no}</TableCell>
                          <TableCell>₹{item.mrp?.toFixed(2)}</TableCell>
@@ -534,11 +584,16 @@ export default function NewSale() {
                            ₹{item.extraDiscountAmount?.toFixed(2)}
                            {item.extraDiscountType === 'percent' && ` (${item.extraDiscountValue || 0}%)`}
                            {item.extraDiscountType === 'cost' && ` (₹${item.extraDiscountValue || 0})`}
+                           {!item.extraDiscountType && '₹0.00'} {/* Show 0 if no extra discount */}
                          </TableCell>
                          <TableCell>₹{item.gstAmount?.toFixed(2)} ({item.gst || 0}%)</TableCell>
                          <TableCell align="right">{item.quantity}</TableCell>
                          <TableCell align="right" sx={{ fontWeight: 'medium'}}>₹{item.finalSubtotal?.toFixed(2)}</TableCell>
-                         <TableCell align="right"> <IconButton size="small" color="error" onClick={() => handleRemoveItem(index)}> <DeleteIcon fontSize="small" /> </IconButton> </TableCell>
+                         <TableCell align="right">
+                             <IconButton size="small" color="error" onClick={() => handleRemoveItem(index)}>
+                                 <DeleteIcon fontSize="small" />
+                             </IconButton>
+                         </TableCell>
                       </TableRow>
                     ))
                    )}
@@ -548,8 +603,7 @@ export default function NewSale() {
           </Grid>
 
            {/* Row: Customer Phone */}
-           {/* ... (remains the same) ... */}
-            {billItems.length > 0 && (
+           {billItems.length > 0 && (
             <>
               <Grid item xs={12}>
                  <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Customer Details</Typography>
@@ -561,23 +615,40 @@ export default function NewSale() {
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   fullWidth
                   required
-                  type="tel"
+                  type="tel" // Use tel type for better mobile input
+                  inputProps={{ maxLength: 15 }} // Optional: Limit length
                 />
               </Grid>
-               <Grid item xs={12} md={6} />
+              {/* Empty grid item to push total to the right on larger screens */}
+               <Grid item xs={false} md={6} />
             </>
           )}
 
            {/* Row: Total & Generate Bill Button */}
-           {/* ... (remains the same) ... */}
            {billItems.length > 0 && (
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+            <Grid item xs={12} sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mt: 2, gap: 2 }}>
               <Box>
-                  <Typography variant="body2" color="text.secondary"> Total Savings (Std+Extra): ₹{totalDiscount.toFixed(2)} </Typography>
-                  <Typography variant="h5" component="span" sx={{ mt: 1 }}> Grand Total:{' '} </Typography>
-                  <Typography variant="h4" component="span" color="primary" sx={{ fontWeight: 'bold', ml: 1 }}> ₹{grandTotal.toFixed(2)} </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Savings (Std+Extra): ₹{totalDiscount.toFixed(2)}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', mt: 1 }}>
+                     <Typography variant="h5" component="span">
+                        Grand Total:{' '}
+                     </Typography>
+                     <Typography variant="h4" component="span" color="primary" sx={{ fontWeight: 'bold', ml: 1 }}>
+                        ₹{grandTotal.toFixed(2)}
+                     </Typography>
+                  </Box>
               </Box>
-              <Button variant="contained" size="large" startIcon={<PrintIcon />} onClick={handleGenerateBill} > Generate & Print Bill </Button>
+              <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={<PrintIcon />}
+                  onClick={handleGenerateBill}
+                  sx={{ width: { xs: '100%', sm: 'auto' }}} // Full width on small screens
+              >
+                 Generate & Print Bill
+              </Button>
             </Grid>
           )}
 
@@ -585,11 +656,25 @@ export default function NewSale() {
       </Paper>
 
       {/* --- Snackbar & Invoice Modal --- */}
-      {/* ... (remains the same) ... */}
-       <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} >
-         <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} variant="filled" sx={{ width: '100%' }} > {snackbarMessage} </Alert>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} variant="filled" sx={{ width: '100%' }}>
+            {snackbarMessage}
+        </Alert>
       </Snackbar>
-      {showInvoice && saleId && ( <InvoiceModal open={showInvoice} saleId={saleId} onClose={handleCloseInvoice} /> )}
+
+      {/* Conditionally render InvoiceModal only when showInvoice and saleId are true */}
+      {showInvoice && saleId && (
+        <InvoiceModal
+            open={showInvoice}
+            saleId={saleId}
+            onClose={handleCloseInvoice}
+        />
+      )}
 
     </Layout>
   );
