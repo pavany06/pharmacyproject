@@ -19,7 +19,7 @@ import {
   FormControl,
 } from '@mui/material';
 
-// Updated initial state to include reminder_quantity
+// Initial state remains the same (no actual_purchase_cost field needed here)
 const initialFormData = {
   product_name: '',
   shop_name: '',
@@ -28,14 +28,24 @@ const initialFormData = {
   drug_type: 'tablet',
   expiry_date: '',
   purchase_rate: '',
+  purchase_discount: '',
   gst: '',
   mrp: '',
-  discount: '',
+  discount: '', // Selling discount
   stock: '0',
-  reminder_quantity: '5', // Added default reminder quantity
+  reminder_quantity: '5',
 };
 
 const drugTypes = ['tonic', 'syrup', 'tablet', 'capsule', 'ointment', 'other'];
+
+// Helper function to calculate net purchase rate (can reuse from Inventory)
+const calculateNetPurchaseRate = (rate, discount) => {
+    const rateNum = parseFloat(rate) || 0;
+    const discountNum = parseFloat(discount) || 0;
+    if (rateNum <= 0) return 0;
+    const discountAmount = rateNum * (discountNum / 100);
+    return rateNum - discountAmount;
+};
 
 
 export default function MedicineModal({ open, medicine, onClose }) {
@@ -46,31 +56,31 @@ export default function MedicineModal({ open, medicine, onClose }) {
 
   useEffect(() => {
     if (medicine) {
-      // Populate form including reminder_quantity
       setFormData({
-        product_name: medicine.product_name,
-        shop_name: medicine.shop_name,
-        batch_no: medicine.batch_no,
-        no_of_items: medicine.no_of_items,
+        product_name: medicine.product_name || '',
+        shop_name: medicine.shop_name || '',
+        batch_no: medicine.batch_no || '',
+        no_of_items: medicine.no_of_items || '',
         drug_type: drugTypes.includes(medicine.drug_type) ? medicine.drug_type : 'tablet',
         expiry_date: medicine.expiry_date || '',
         purchase_rate: medicine.purchase_rate?.toString() || '',
+        purchase_discount: medicine.purchase_discount?.toString() || '',
         gst: medicine.gst?.toString() || '',
         mrp: medicine.mrp?.toString() || '',
-        discount: medicine.discount?.toString() || '',
+        discount: medicine.discount?.toString() || '', // Selling discount
         stock: medicine.stock?.toString() || '0',
-        reminder_quantity: medicine.reminder_quantity?.toString() || '5', // Populate reminder, default to '5' if null/undefined
+        reminder_quantity: medicine.reminder_quantity?.toString() || '5',
       });
     } else {
-      setFormData(initialFormData); // Reset to initial including default reminder
+      setFormData(initialFormData);
     }
   }, [medicine, open]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    // Ensure non-negative integers for stock and reminder quantity
-    if ((name === 'stock' || name === 'reminder_quantity') && value !== '' && parseInt(value, 10) < 0) {
-        return; // Prevent negative numbers
+    // Prevent negative numbers for specific fields
+    if (['stock', 'reminder_quantity', 'purchase_rate', 'gst', 'mrp', 'discount', 'purchase_discount'].includes(name) && value !== '' && parseFloat(value) < 0) {
+        return;
     }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -89,7 +99,14 @@ export default function MedicineModal({ open, medicine, onClose }) {
     setError('');
     setLoading(true);
 
-    // Prepare data including reminder_quantity
+    // Parse values needed for calculation
+    const purchaseRate = parseFloat(formData.purchase_rate) || 0;
+    const purchaseDiscount = parseFloat(formData.purchase_discount) || 0;
+
+    // Calculate the actual purchase cost
+    const actualPurchaseCost = calculateNetPurchaseRate(purchaseRate, purchaseDiscount);
+
+    // Prepare data including the calculated actual_purchase_cost
     const data = {
       user_id: user?.id,
       product_name: formData.product_name,
@@ -98,15 +115,17 @@ export default function MedicineModal({ open, medicine, onClose }) {
       no_of_items: formData.no_of_items,
       drug_type: formData.drug_type,
       expiry_date: formData.expiry_date || null,
-      purchase_rate: parseFloat(formData.purchase_rate) || 0,
+      purchase_rate: purchaseRate,
+      purchase_discount: formData.purchase_discount === '' ? null : purchaseDiscount,
+      actual_purchase_cost: actualPurchaseCost, // <-- Save calculated value
       gst: parseFloat(formData.gst) || 0,
       mrp: parseFloat(formData.mrp) || 0,
-      discount: formData.discount === '' ? null : (parseFloat(formData.discount) || null),
+      discount: formData.discount === '' ? null : (parseFloat(formData.discount) || null), // Selling discount
       stock: parseInt(formData.stock, 10) || 0,
-      reminder_quantity: parseInt(formData.reminder_quantity, 10) || 0, // Add reminder quantity, default 0 if invalid
+      reminder_quantity: parseInt(formData.reminder_quantity, 10) || 0,
     };
 
-    if (data.expiry_date && isNaN(new Date(data.expiry_date))) {
+     if (data.expiry_date && isNaN(new Date(data.expiry_date))) {
         data.expiry_date = null;
     }
 
@@ -121,6 +140,7 @@ export default function MedicineModal({ open, medicine, onClose }) {
     }
 
     if (result.error) {
+      console.error("Supabase error:", result.error); // Log detailed error
       setError(result.error.message);
       setLoading(false);
     } else {
@@ -194,12 +214,11 @@ export default function MedicineModal({ open, medicine, onClose }) {
                 </FormControl>
             </Grid>
 
-
-             {/* Row 4 - Stock, Reminder & Purchase Rate */}
-            <Grid item xs={12} sm={4}> {/* Adjusted size */}
+             {/* Row 4 - Stock, Reminder */}
+            <Grid item xs={12} sm={6}>
               <TextField name="stock" label="Stock (Quantity)" type="number" value={formData.stock} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} />
             </Grid>
-            <Grid item xs={12} sm={4}> {/* Added Reminder Field */}
+             <Grid item xs={12} sm={6}>
                <TextField
                  name="reminder_quantity"
                  label="Reminder At Qty"
@@ -211,11 +230,27 @@ export default function MedicineModal({ open, medicine, onClose }) {
                  inputProps={{ step: "1", min: "0" }}
                />
             </Grid>
-            <Grid item xs={12} sm={4}> {/* Adjusted size */}
+
+            {/* Row 5 - Purchase Details */}
+            <Grid item xs={12} sm={6}>
               <TextField name="purchase_rate" label="Purchase Rate" type="number" value={formData.purchase_rate} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                name="purchase_discount"
+                label="Purchase Discount (%)"
+                type="number"
+                value={formData.purchase_discount}
+                onChange={handleChange}
+                fullWidth
+                InputProps={{
+                    inputProps: { step: "0.01", min: "0.00" }
+                }}
+              />
+            </Grid>
 
-             {/* Row 5 - Pricing */}
+
+             {/* Row 6 - Selling Details */}
             <Grid item xs={12} sm={4}>
               <TextField name="mrp" label="MRP" type="number" value={formData.mrp} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
@@ -225,7 +260,7 @@ export default function MedicineModal({ open, medicine, onClose }) {
             <Grid item xs={12} sm={4}>
                <TextField
                  name="discount"
-                 label="Discount (%)"
+                 label="Selling Discount (%)"
                  type="number"
                  value={formData.discount}
                  onChange={handleChange}
