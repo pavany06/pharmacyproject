@@ -1,6 +1,7 @@
 // src/pages/Inventory.jsx
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+// Corrected import path for supabase
+import { supabase } from '../lib/supabase.js';
 import {
   Alert,
   AlertTitle,
@@ -31,6 +32,16 @@ import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import Layout from '../components/Layout';
 import MedicineModal from '../components/MedicineModal';
 
+// --- Helper Functions ---
+
+// Parses the leading integer from the item string (e.g., "10 tablets")
+const parseUnitsFromItemString = (itemString) => {
+    if (!itemString) return null;
+    const match = itemString.match(/^\s*(\d+)/);
+    const units = match ? parseInt(match[1], 10) : null;
+    return units > 0 ? units : null; // Return null if not a positive number
+};
+
 // Helper function to format YYYY-MM-DD date to MM/YYYY for display
 const formatExpiryDisplay = (dateString) => {
   if (!dateString || dateString.length < 7) return '-';
@@ -38,6 +49,7 @@ const formatExpiryDisplay = (dateString) => {
       // Assumes dateString is 'YYYY-MM-DD'
       const year = dateString.substring(0, 4);
       const month = dateString.substring(5, 7);
+      // Ensure month is two digits
       const formattedMonth = month.padStart(2, '0');
       return `${formattedMonth}/${year}`;
   } catch (e) {
@@ -52,14 +64,17 @@ const formatDate = (dateString) => {
   try {
       const parts = dateString.split('-');
       if (parts.length !== 3) return '-';
+      // Use UTC to avoid timezone issues when parsing YYYY-MM-DD
       const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
       if (isNaN(date)) return '-';
+      // Format as DD/MM/YYYY
       return date.toLocaleDateString('en-GB', { timeZone: 'UTC' });
   } catch (e) {
       console.error("Error formatting date:", dateString, e);
       return '-';
   }
 };
+// --- ---
 
 
 export default function Inventory() {
@@ -74,11 +89,11 @@ export default function Inventory() {
   const [showExpiryAlert, setShowExpiryAlert] = useState(true);
   const [showLowStockAlert, setShowLowStockAlert] = useState(true);
 
-  // Check both expiry and low stock
+  // --- checkWarnings updated ---
   const checkWarnings = (medicineList) => {
-    // Expiry Check
+    // Expiry Check (remains the same logic)
     const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0); // Use UTC for comparison
     const oneMonthFromNow = new Date(today);
     oneMonthFromNow.setUTCMonth(oneMonthFromNow.getUTCMonth() + 1);
 
@@ -87,8 +102,9 @@ export default function Inventory() {
       try {
           const parts = med.expiry_date.split('-');
           if (parts.length !== 3) return false;
+          // Parse as UTC
           const expiryDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-           expiryDate.setUTCHours(0, 0, 0, 0);
+           expiryDate.setUTCHours(0, 0, 0, 0); // Ensure time part is zeroed
           return !isNaN(expiryDate) && expiryDate >= today && expiryDate < oneMonthFromNow;
       } catch (e) {
           console.error("Error parsing expiry date for warning check:", med.product_name, e);
@@ -98,17 +114,47 @@ export default function Inventory() {
     setExpiringMedicines(expiring);
     setShowExpiryAlert(expiring.length > 0);
 
-    // Low Stock Check
+    // Low Stock Check (Updated logic: compare packages)
     const lowStock = medicineList.filter(med => {
-        const reminderQty = med.reminder_quantity ?? 0;
-        const currentStock = med.stock ?? 0;
-        // Trigger if stock is positive but at or below reminder level
-        return currentStock > 0 && reminderQty > 0 && currentStock <= reminderQty;
+        const reminderPackages = med.reminder_quantity ?? 0; // Reminder is in packages
+        const currentStockPackages = med.stock ?? 0; // Current stock is in packages
+        // Trigger if stock (packages) is positive but at or below reminder level (packages)
+        // Also ensure reminder level itself is positive
+        return currentStockPackages > 0 && reminderPackages > 0 && currentStockPackages <= reminderPackages;
     });
     setLowStockMedicines(lowStock);
     setShowLowStockAlert(lowStock.length > 0);
   };
+  // --- ---
 
+  // --- fetchMedicines updated ---
+  const fetchMedicines = async () => {
+    setLoading(true);
+    setExpiringMedicines([]);
+    setLowStockMedicines([]);
+    setShowExpiryAlert(false);
+    setShowLowStockAlert(false);
+
+    // Select all columns including the new ones and remove user filter
+    const { data, error } = await supabase
+      .from('medicines')
+      .select('*') // Selects all columns
+      // Removed .eq('user_id', user.id)
+      .order('product_name', { ascending: true }); // Order by product name for consistency
+
+    if (!error && data) {
+      setMedicines(data);
+      setFilteredMedicines(data);
+      checkWarnings(data);
+    } else if (error) {
+       console.error("Error fetching medicines:", error);
+       alert("Failed to load inventory.");
+       setMedicines([]);
+       setFilteredMedicines([]);
+    }
+    setLoading(false);
+  };
+ // --- ---
 
   useEffect(() => {
     fetchMedicines();
@@ -116,6 +162,7 @@ export default function Inventory() {
   }, []); // Run only once on mount
 
   useEffect(() => {
+    // Filter logic remains the same
     const lowerSearchTerm = searchTerm.toLowerCase();
     const filtered = medicines.filter(
       (medicine) =>
@@ -127,47 +174,21 @@ export default function Inventory() {
   }, [searchTerm, medicines]);
 
 
-  const fetchMedicines = async () => {
-    setLoading(true);
-    setExpiringMedicines([]);
-    setLowStockMedicines([]);
-    setShowExpiryAlert(false); // Reset visibility
-    setShowLowStockAlert(false); // Reset visibility
-
-    const { data, error } = await supabase
-      .from('medicines')
-      .select('*') // Selects all columns including the new ones
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setMedicines(data);
-      setFilteredMedicines(data); // Initialize filtered list
-      checkWarnings(data); // Check warnings based on fetched data
-    } else if (error) {
-       console.error("Error fetching medicines:", error);
-       alert("Failed to load inventory.");
-       setMedicines([]); // Ensure state is empty on error
-       setFilteredMedicines([]);
-    }
-    setLoading(false);
-  };
-
+  // --- handleDelete, handleEdit, handleModalClose, handleAddNew, handleCloseExpiryAlert, handleCloseLowStockAlert remain the same ---
   const handleDelete = async (id) => {
-    // Use window.confirm for simple confirmation
     if (!window.confirm('Are you sure you want to delete this medicine?')) return;
 
-    setLoading(true); // Indicate loading state during deletion
+    setLoading(true);
     const { error } = await supabase.from('medicines').delete().eq('id', id);
-    setLoading(false); // Stop loading indicator
+    setLoading(false);
 
     if (!error) {
       fetchMedicines(); // Refetch to update list and warnings
     } else {
       console.error("Error deleting medicine:", error);
-      alert("Failed to delete medicine."); // Inform user
+      alert("Failed to delete medicine.");
     }
   };
-
 
   const handleEdit = (medicine) => {
     setEditingMedicine(medicine);
@@ -177,24 +198,25 @@ export default function Inventory() {
   const handleModalClose = () => {
     setIsModalOpen(false);
     setEditingMedicine(null);
-    fetchMedicines(); // Refetch data after modal closes (add or edit might have changed data)
+    fetchMedicines();
   };
 
   const handleAddNew = () => {
-    setEditingMedicine(null); // Ensure no medicine data is passed for adding new
+    setEditingMedicine(null);
     setIsModalOpen(true);
   };
 
-  const handleCloseExpiryAlert = () => {
+   const handleCloseExpiryAlert = () => {
       setShowExpiryAlert(false);
   };
   const handleCloseLowStockAlert = () => {
       setShowLowStockAlert(false);
   };
+  // --- ---
 
   return (
     <Layout>
-      {/* Expiry Warning Alert */}
+      {/* Expiry Warning Alert (Uses formatDate) */}
       {expiringMedicines.length > 0 && showExpiryAlert && (
         <Alert
             severity="warning"
@@ -209,7 +231,7 @@ export default function Inventory() {
               <ListItem key={med.id} disablePadding sx={{ pl: 2 }}>
                 <ListItemText
                   primary={`${med.product_name} (Batch: ${med.batch_no})`}
-                  secondary={`Expires: ${formatDate(med.expiry_date)}`} // Use full date in alert
+                  secondary={`Expires: ${formatDate(med.expiry_date)}`} 
                 />
               </ListItem>
             ))}
@@ -217,7 +239,7 @@ export default function Inventory() {
         </Alert>
       )}
 
-      {/* Low Stock Warning Alert */}
+      {/* Low Stock Warning Alert (Updated text based on package logic) */}
       {lowStockMedicines.length > 0 && showLowStockAlert && (
         <Alert
             severity="info"
@@ -226,13 +248,14 @@ export default function Inventory() {
             onClose={handleCloseLowStockAlert}
         >
           <AlertTitle>Low Stock Reminder</AlertTitle>
-          Medicines at or below reminder quantity:
+          Medicines at or below reminder package quantity:
           <List dense sx={{ pt: 0, maxHeight: 150, overflowY: 'auto' }}>
             {lowStockMedicines.map(med => (
               <ListItem key={med.id} disablePadding sx={{ pl: 2 }}>
                 <ListItemText
                   primary={`${med.product_name} (Batch: ${med.batch_no})`}
-                  secondary={`Current: ${med.stock}, Reminder at: ${med.reminder_quantity}`}
+                   // Display current packages and reminder packages
+                  secondary={`Current Pkgs: ${med.stock}, Reminder at Pkgs: ${med.reminder_quantity}`}
                 />
               </ListItem>
             ))}
@@ -240,7 +263,7 @@ export default function Inventory() {
         </Alert>
       )}
 
-      {/* Header and Search Bar */}
+      {/* Header and Search Bar (No change) */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
           Inventory Management
@@ -271,7 +294,7 @@ export default function Inventory() {
         />
       </Paper>
 
-      {/* Inventory Table */}
+      {/* --- Inventory Table - Updated Headers and Columns --- */}
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -283,12 +306,15 @@ export default function Inventory() {
           </Typography>
         ) : (
           <Table sx={{
-            minWidth: 1400, // Adjusted minWidth for the new columns
+             // Adjusted minWidth significantly for new columns
+            minWidth: 1800, // Increase minWidth to accommodate new columns
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
-              padding: '8px 10px',
-              whiteSpace: 'nowrap',
-            }
+              padding: '8px 10px', // Adjust padding if needed
+              whiteSpace: 'nowrap', // Prevent wrapping
+              overflow: 'hidden', // Hide overflow
+              textOverflow: 'ellipsis', // Add ellipsis for overflow
+            },
           }} size="small">
             <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
@@ -296,15 +322,17 @@ export default function Inventory() {
                 <TableCell sx={{ fontWeight: 'bold' }}>Product Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Shop Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Batch No</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Expiry (MM/YYYY)</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>No of Items</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Expiry (MM/YYYY)</TableCell> {/* Updated */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Units/Pkg</TableCell> {/* Renamed */}
                 <TableCell sx={{ fontWeight: 'bold' }}>Drug Type</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Purchase Rate</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Purch Disc (%)</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Actual Purch Cost</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Stock (Pkgs)</TableCell> {/* Updated */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Rem Units</TableCell> {/* Added */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Total Units</TableCell> {/* Added */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Purchase Rate (Pkg)</TableCell> {/* Updated */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Purch Disc (%)</TableCell> {/* Added */}
+                <TableCell sx={{ fontWeight: 'bold' }}>Actual Purch Cost (Pkg)</TableCell> {/* Added */}
                 <TableCell sx={{ fontWeight: 'bold' }}>GST (%)</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>MRP</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>MRP (Pkg)</TableCell> {/* Updated */}
                 <TableCell sx={{ fontWeight: 'bold' }}>Sell Disc (%)</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
                 {/* ----------------------- */}
@@ -314,12 +342,15 @@ export default function Inventory() {
               {filteredMedicines.map((medicine) => {
                 const isExpiring = expiringMedicines.some(exp => exp.id === medicine.id);
                 const isLowStock = lowStockMedicines.some(low => low.id === medicine.id);
-                // Directly use the stored actual_purchase_cost
+                const unitsPerPackage = parseUnitsFromItemString(medicine.no_of_items) || 0;
+                const stockPackages = medicine.stock ?? 0;
+                const remainingUnits = medicine.remaining_units ?? 0;
+                const totalUnits = (stockPackages * unitsPerPackage) + remainingUnits;
                 const actualPurchaseCost = medicine.actual_purchase_cost;
 
+                // Return statement needs to be inside the map callback function
                 return (
                   <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                    {/* --- Updated Data Cells --- */}
                     <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
                       {medicine.product_name}
                     </TableCell>
@@ -329,7 +360,7 @@ export default function Inventory() {
                         backgroundColor: isExpiring ? 'warning.light' : 'inherit',
                         color: isExpiring ? 'warning.contrastText' : 'inherit',
                       }}>
-                      {formatExpiryDisplay(medicine.expiry_date)} {/* Use MM/YYYY format */}
+                      {formatExpiryDisplay(medicine.expiry_date)}
                     </TableCell>
                     <TableCell>{medicine.no_of_items}</TableCell>
                     <TableCell>{medicine.drug_type}</TableCell>
@@ -338,13 +369,15 @@ export default function Inventory() {
                         color: isLowStock ? 'info.contrastText' : 'inherit',
                         fontWeight: isLowStock ? 'bold' : 'normal',
                       }}>
-                      {medicine.stock}
+                      {stockPackages}
                     </TableCell>
+                    <TableCell>{remainingUnits}</TableCell>
+                    <TableCell>{totalUnits}</TableCell>
                     <TableCell>
                       {typeof medicine.purchase_rate === 'number' ? `₹${medicine.purchase_rate.toFixed(2)}` : '-'}
                     </TableCell>
-                    <TableCell>
-                      {medicine.purchase_discount ? `${medicine.purchase_discount.toFixed(2)}%` : '-'}
+                     <TableCell>
+                      {medicine.purchase_discount != null ? `${medicine.purchase_discount.toFixed(2)}%` : '-'}
                     </TableCell>
                     <TableCell sx={{ fontWeight: 'medium' }}>
                       {typeof actualPurchaseCost === 'number' ? `₹${actualPurchaseCost.toFixed(2)}` : '-'}
@@ -356,9 +389,8 @@ export default function Inventory() {
                       {typeof medicine.mrp === 'number' ? `₹${medicine.mrp.toFixed(2)}` : '-'}
                     </TableCell>
                     <TableCell>
-                      {medicine.discount ? `${medicine.discount.toFixed(2)}%` : '-'}
+                      {medicine.discount != null ? `${medicine.discount.toFixed(2)}%` : '-'}
                     </TableCell>
-                    {/* -------------------------- */}
                     <TableCell align="right">
                       <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)}>
                         <EditIcon fontSize="small"/>
@@ -368,12 +400,13 @@ export default function Inventory() {
                       </IconButton>
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                ); // End of map item return
+              })} {/* End of map */}
             </TableBody>
           </Table>
         )}
       </TableContainer>
+      {/* --- --- */}
 
       {/* Medicine Modal */}
       {isModalOpen && (
