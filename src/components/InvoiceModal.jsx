@@ -330,14 +330,15 @@ export default function InvoiceModal({ open, saleId, onClose }) {
               <Table size="small" sx={{ border: '1px solid #000' }}>
                 <TableHead>
                   <TableRow sx={{ '& th': { border: '1px solid #000', fontWeight: 'bold', padding: '4px 8px' } }}> {/* Compact padding */}
-                     {/* Updated Headers */}
+                      {/* Updated Headers */}
                     <TableCell>Product</TableCell>
                     <TableCell>Batch</TableCell>
                     <TableCell>Exp</TableCell>
                     <TableCell align="right">Qty(Units)</TableCell> {/* Updated */}
                     <TableCell align="right">MRP/Unit</TableCell> {/* Updated */}
                     <TableCell align="right">Total Disc</TableCell> {/* Combined Discount */}
-                    <TableCell align="right">GST Amt</TableCell> {/* GST Amount */}
+                    {/* --- REMOVED GST Amt Header --- */}
+                    {/* <TableCell align="right">GST Amt</TableCell> */}
                     <TableCell align="right">Amount</TableCell>
                   </TableRow>
                 </TableHead>
@@ -367,7 +368,8 @@ export default function InvoiceModal({ open, saleId, onClose }) {
                         <TableCell align="right">{item.quantity || 0}</TableCell> {/* Display units sold */}
                         <TableCell align="right">{amounts.unitMrpDisplay.toFixed(2)}</TableCell> {/* Display unit MRP */}
                         <TableCell align="right">{amounts.totalDiscountAmount.toFixed(2)}</TableCell> {/* Display total discount */}
-                        <TableCell align="right">{amounts.gstAmount.toFixed(2)}</TableCell> {/* Display GST amount */}
+                        {/* --- REMOVED GST Amt Cell --- */}
+                        {/* <TableCell align="right">{amounts.gstAmount.toFixed(2)}</TableCell> */}
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{amounts.finalSubtotal.toFixed(2)}</TableCell>
                       </TableRow>
                     );
@@ -391,10 +393,14 @@ export default function InvoiceModal({ open, saleId, onClose }) {
                 id="invoice-total-box" // ID for print styling
                 sx={{ textAlign: 'right', p: 1, minWidth: 250, borderRadius: 1 }} // Added border radius
                >
-                 {/* Updated savings display */}
+                {/* Updated savings display */}
                 <Typography variant="body2" sx={{ color: 'inherit' }}>Amount Saved: ₹{totalDiscountApplied.toFixed(2)}</Typography>
                 <Typography variant="h6" sx={{ fontWeight: 'bold', mt: 0.5, color: 'inherit' }}>
                   Total Amount: ₹{sale.grand_total?.toFixed(2)}
+                </Typography>
+                {/* --- ADDED "including GST" Text --- */}
+                <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'inherit' }}>
+                  (including GST)
                 </Typography>
               </Box>
             </Box>
@@ -410,7 +416,7 @@ export default function InvoiceModal({ open, saleId, onClose }) {
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right', fontSize: '0.8rem' }}>
                 For Sri Sai Pharmacy<br /><br />
-                 (Authorised Signatory) {/* Added clarification */}
+                (Authorised Signatory) {/* Added clarification */}
               </Typography>
             </Box>
           </Box>
