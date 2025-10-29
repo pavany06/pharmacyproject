@@ -1,4 +1,3 @@
-// src/components/MedicineModal.jsx
 import { useState, useEffect } from 'react';
 // Corrected import path for supabase
 import { supabase } from '../lib/supabase.js';
@@ -18,6 +17,7 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
+  Autocomplete, // <-- 1. IMPORTED AUTOCOMPLETE
 } from '@mui/material';
 
 // --- Helper Functions ---
@@ -81,6 +81,34 @@ const initialFormData = {
 };
 
 const drugTypes = ['tonic', 'syrup', 'tablet', 'capsule', 'ointment', 'other'];
+
+// <-- 2. ADDED YOUR CLEANED LIST OF SHOP NAMES
+const predefinedShopNames = [
+  'SADHU PHARMA',
+  'RAMA SATHYA DEVA PHARMA',
+  'SRI VIJAYA BHASKARA PHARMACEUTICALS',
+  'SAI DHANALAKSHMI MEDICAL AGENCIES',
+  'SRI DURGA PHARMA',
+  'MANIKANTA MEDICAL AGENCIES',
+  'CHANDRA PHARMACEUTICALS',
+  'SAI RAM MEDICAL AGENCY',
+  'SRK MEDICAL AGENCIES',
+  'SRI RAMACHANDRA MEDICAL DISTRIBUTORS',
+  'AYYAPPA MEDICAL DISTRIBUTORS',
+  'LEELA MEDICALS',
+  'NITHYAJEEVA MEDICAL DISTRIBUTORS',
+  'MAA MEDICAL AGENCIES',
+  'MADHAVI MEDICALS',
+  'LAKSHMI MEDICAL AGENCY',
+  'SAI PURNA MEDICALS',
+  'RAVI CINDICATE',
+  'BALA MEDICAL AGENCIES',
+  'CHAITANYA MEDICALS',
+  'Sai vaishnavi pharma',
+  'Maheshwari medicals',
+  'Sree revathi distributors',
+];
+// <-- END OF LIST
 
 export default function MedicineModal({ open, medicine, onClose }) {
   const [formData, setFormData] = useState(initialFormData);
@@ -222,82 +250,108 @@ export default function MedicineModal({ open, medicine, onClose }) {
             <Grid item xs={12} sm={6}>
               <TextField name="product_name" label="Product Name" value={formData.product_name} onChange={handleChange} fullWidth required />
             </Grid>
+            
+            {/* <-- 3. REPLACED TEXTFIELD WITH AUTOCOMPLETE --> */}
             <Grid item xs={12} sm={6}>
-              <TextField name="shop_name" label="Shop Name" value={formData.shop_name} onChange={handleChange} fullWidth required />
-            </Grid>
-             {/* Row 2 */}
-             <Grid item xs={12} sm={6}>
-              <TextField name="batch_no" label="Batch No" value={formData.batch_no} onChange={handleChange} fullWidth required />
-            </Grid>
-             <Grid item xs={12} sm={6}>
-               <TextField
-                name="no_of_items"
-                // Updated label
-                label="Units Per Package (e.g., 10 tablets)"
-                value={formData.no_of_items}
-                onChange={handleChange}
-                fullWidth
-                required
-                helperText="Must start with a number. Used for unit calculations."
+              <Autocomplete
+                freeSolo // Allows typing values NOT in the list
+                options={predefinedShopNames} // Use your manual list
+                value={formData.shop_name} // Controlled by your form state
+                
+                // This updates the state on every keystroke or selection
+                onInputChange={(event, newInputValue) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    shop_name: newInputValue || '', // Update state with typed or selected value
+                  }));
+                }}
+                
+                // This renders the text field inside the Autocomplete
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Shop Name"
+                    required // This ensures the asterisk still shows
+                    fullWidth
+                  />
+                )}
               />
             </Grid>
+            {/* <-- END OF REPLACEMENT --> */}
+            
+              {/* Row 2 */}
+              <Grid item xs={12} sm={6}>
+                <TextField name="batch_no" label="Batch No" value={formData.batch_no} onChange={handleChange} fullWidth required />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  name="no_of_items"
+                  // Updated label
+                  label="Units Per Package (e.g., 10 tablets)"
+                  value={formData.no_of_items}
+                  onChange={handleChange}
+                  fullWidth
+                  required
+                  helperText="Must start with a number. Used for unit calculations."
+                />
+              </Grid>
 
             {/* Row 3 - Expiry Date & Type */}
-             <Grid item xs={12} sm={6}>
-               <TextField
-                name="expiry_date"
-                label="Expiry (MM/YYYY)" // Updated label
-                type="month" // Changed type to month
-                value={formData.expiry_date} // Value should be YYYY-MM
-                onChange={handleChange} // Use general handler
-                fullWidth
-                required // Expiry is required
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                    <InputLabel id="drug-type-select-label">Drug Type</InputLabel>
-                    <Select
-                        labelId="drug-type-select-label"
-                        id="drug_type_select"
-                        name="drug_type"
-                        value={formData.drug_type}
-                        label="Drug Type"
-                        onChange={handleSelectChange}
-                    >
-                        {drugTypes.map((type) => (
-                         <MenuItem key={type} value={type}>
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                         </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  name="expiry_date"
+                  label="Expiry (MM/YYYY)" // Updated label
+                  type="month" // Changed type to month
+                  value={formData.expiry_date} // Value should be YYYY-MM
+                  onChange={handleChange} // Use general handler
+                  fullWidth
+                  required // Expiry is required
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth required>
+                      <InputLabel id="drug-type-select-label">Drug Type</InputLabel>
+                      <Select
+                          labelId="drug-type-select-label"
+                          id="drug_type_select"
+                          name="drug_type"
+                          value={formData.drug_type}
+                          label="Drug Type"
+                          onChange={handleSelectChange}
+                      >
+                          {drugTypes.map((type) => (
+                           <MenuItem key={type} value={type}>
+                               {type.charAt(0).toUpperCase() + type.slice(1)}
+                           </MenuItem>
+                          ))}
+                      </Select>
+                  </FormControl>
+              </Grid>
 
             {/* Row 4 - Stock */}
-             <Grid item xs={12} sm={medicine ? 4 : 6}> {/* Adjust grid size if editing */}
-               {/* Updated label */}
-              <TextField name="stock" label="Stock (Full Packages)" type="number" value={formData.stock} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} />
-            </Grid>
-             {/* Row 7 - Remaining Units (only shown when editing) */}
+              <Grid item xs={12} sm={medicine ? 4 : 6}> {/* Adjust grid size if editing */}
+                 {/* Updated label */}
+                <TextField name="stock" label="Stock (Full Packages)" type="number" value={formData.stock} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} />
+              </Grid>
+              {/* Row 7 - Remaining Units (only shown when editing) */}
             {medicine && (
-               <Grid item xs={12} sm={4}>
+                <Grid item xs={12} sm={4}>
                   <TextField name="remaining_units" label="Remaining Units" type="number" value={formData.remaining_units} onChange={handleChange} fullWidth required inputProps={{ step: "1", min: "0" }} helperText="Units in open pkg"/>
-               </Grid>
+                </Grid>
             )}
             <Grid item xs={12} sm={medicine ? 4 : 6}> {/* Adjust grid size */}
-               {/* Updated label */}
-               <TextField
-                 name="reminder_quantity"
-                 label="Reminder At (Packages)"
-                 type="number"
-                 value={formData.reminder_quantity}
-                 onChange={handleChange}
-                 fullWidth
-                 required
-                 inputProps={{ step: "1", min: "0" }}
-               />
+                 {/* Updated label */}
+                <TextField
+                  name="reminder_quantity"
+                  label="Reminder At (Packages)"
+                  type="number"
+                  value={formData.reminder_quantity}
+                  onChange={handleChange}
+                  fullWidth
+                  required
+                  inputProps={{ step: "1", min: "0" }}
+                />
             </Grid>
             {/* Row 5 - Purchase */}
             <Grid item xs={12} sm={6}>
@@ -318,26 +372,26 @@ export default function MedicineModal({ open, medicine, onClose }) {
                 }}
               />
             </Grid>
-             {/* Row 6 - Pricing */}
+              {/* Row 6 - Pricing */}
             <Grid item xs={12} sm={4}>
-               {/* Updated label */}
+                 {/* Updated label */}
               <TextField name="mrp" label="MRP (per Pkg)" type="number" value={formData.mrp} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField name="gst" label="GST (%)" type="number" value={formData.gst} onChange={handleChange} fullWidth required inputProps={{ step: "0.01", min: "0" }} />
             </Grid>
             <Grid item xs={12} sm={4}>
-               <TextField
-                 name="discount"
-                 label="Selling Discount (%)"
-                 type="number"
-                 value={formData.discount}
-                 onChange={handleChange}
-                 fullWidth
-                 InputProps={{
-                     inputProps: { step: "0.01", min: "0.00" } // Allow decimals, min 0
-                 }}
-               />
+                <TextField
+                  name="discount"
+                  label="Selling Discount (%)"
+                  type="number"
+                  value={formData.discount}
+                  onChange={handleChange}
+                  fullWidth
+                  InputProps={{
+                      inputProps: { step: "0.01", min: "0.00" } // Allow decimals, min 0
+                  }}
+                />
             </Grid>
           </Grid>
         </DialogContent>
