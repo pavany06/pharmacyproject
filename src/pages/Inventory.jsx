@@ -212,6 +212,7 @@ export default function Inventory() {
   const handleCloseLowStockAlert = () => {
       setShowLowStockAlert(false);
   };
+  // --- ---
 
   return (
     <Layout>
@@ -245,7 +246,7 @@ export default function Inventory() {
             icon={<Inventory2OutlinedIcon fontSize="inherit" />}
             sx={{ mb: 3 }}
             onClose={handleCloseLowStockAlert}
-       >
+        >
           <AlertTitle>Low Stock Reminder</AlertTitle>
           Medicines at or below reminder package quantity:
           <List dense sx={{ pt: 0, maxHeight: 150, overflowY: 'auto' }}>
@@ -305,8 +306,8 @@ export default function Inventory() {
           </Typography>
         ) : (
           <Table sx={{
-             // Adjusted minWidth slightly for new column
-            minWidth: 1850, // Increased from 1800
+             // Adjusted minWidth significantly for new columns
+            minWidth: 1800, // Increase minWidth to accommodate new columns
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
               padding: '8px 10px', // Adjust padding if needed
@@ -318,7 +319,6 @@ export default function Inventory() {
             <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
                 {/* --- Updated Headers --- */}
-                <TableCell sx={{ fontWeight: 'bold', width: '50px' }}>Sno</TableCell> {/* <-- ADDED */}
                 <TableCell sx={{ fontWeight: 'bold' }}>Product Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Shop Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Batch No</TableCell>
@@ -339,8 +339,7 @@ export default function Inventory() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {/* --- CHANGED: Added 'index' to map function --- */}
-              {filteredMedicines.map((medicine, index) => {
+              {filteredMedicines.map((medicine) => {
                 const isExpiring = expiringMedicines.some(exp => exp.id === medicine.id);
                 const isLowStock = lowStockMedicines.some(low => low.id === medicine.id);
                 const unitsPerPackage = parseUnitsFromItemString(medicine.no_of_items) || 0;
@@ -352,16 +351,15 @@ export default function Inventory() {
                 // Return statement needs to be inside the map callback function
                 return (
                   <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                    <TableCell>{index + 1}</TableCell> {/* <-- ADDED: Sno cell */}
                     <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
                       {medicine.product_name}
-                     </TableCell>
+                    </TableCell>
                     <TableCell>{medicine.shop_name}</TableCell>
                     <TableCell>{medicine.batch_no}</TableCell>
                     <TableCell sx={{
                         backgroundColor: isExpiring ? 'warning.light' : 'inherit',
                         color: isExpiring ? 'warning.contrastText' : 'inherit',
-                     }}>
+                      }}>
                       {formatExpiryDisplay(medicine.expiry_date)}
                     </TableCell>
                     <TableCell>{medicine.no_of_items}</TableCell>
@@ -374,7 +372,7 @@ export default function Inventory() {
                       {stockPackages}
                     </TableCell>
                     <TableCell>{remainingUnits}</TableCell>
-                   <TableCell>{totalUnits}</TableCell>
+                    <TableCell>{totalUnits}</TableCell>
                     <TableCell>
                       {typeof medicine.purchase_rate === 'number' ? `₹${medicine.purchase_rate.toFixed(2)}` : '-'}
                     </TableCell>
@@ -383,14 +381,14 @@ export default function Inventory() {
                     </TableCell>
                     <TableCell sx={{ fontWeight: 'medium' }}>
                       {typeof actualPurchaseCost === 'number' ? `₹${actualPurchaseCost.toFixed(2)}` : '-'}
-                   </TableCell>
-                   <TableCell>
+                    </TableCell>
+                    <TableCell>
                       {typeof medicine.gst === 'number' ? `${medicine.gst.toFixed(2)}%` : '-'}
                     </TableCell>
                     <TableCell>
                       {typeof medicine.mrp === 'number' ? `₹${medicine.mrp.toFixed(2)}` : '-'}
                     </TableCell>
-                   <TableCell>
+                    <TableCell>
                       {medicine.discount != null ? `${medicine.discount.toFixed(2)}%` : '-'}
                     </TableCell>
                     <TableCell align="right">
@@ -401,7 +399,7 @@ export default function Inventory() {
                         <DeleteIcon fontSize="small"/>
                       </IconButton>
                     </TableCell>
-                 </TableRow>
+                  </TableRow>
                 ); // End of map item return
               })} {/* End of map */}
             </TableBody>
