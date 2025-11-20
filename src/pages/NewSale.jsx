@@ -122,7 +122,11 @@ export default function NewSale() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('info');
+  
+  // Customer Details State
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+
   const [extraDiscountType, setExtraDiscountType] = useState('percent');
   const [extraDiscountValue, setExtraDiscountValue] = useState('');
   const [saleUnitType, setSaleUnitType] = useState('Unit');
@@ -407,12 +411,15 @@ export default function NewSale() {
     const billNumber = `BILL-${Date.now()}`;
     let generatedSaleId = null;
 
+    // Logic for customer Name: Walk-in if empty
+    const finalCustomerName = customerName && customerName.trim() !== '' ? customerName : 'Walk-in';
+
     try {
         const { data: saleData, error: saleError } = await supabase
           .from('sales')
           .insert([ {
               bill_number: billNumber,
-              customer_name: 'Walk-in',
+              customer_name: finalCustomerName, // Use logic
               customer_phone: customerPhone || '-',
               grand_total: parseFloat(grandTotal.toFixed(2)),
               sale_date: new Date().toISOString(),
@@ -481,6 +488,7 @@ export default function NewSale() {
     setSaleId(null);
     setBillItems([]);
     setCustomerPhone('');
+    setCustomerName(''); // Reset customer name
     setExtraDiscountType('percent');
     setExtraDiscountValue('');
     setSaleUnitType('Unit');
@@ -704,7 +712,7 @@ export default function NewSale() {
              </TableContainer>
           </Grid>
 
-           {/* Customer Phone */}
+           {/* Customer Details */}
            {billItems.length > 0 && (
             <>
               <Grid item xs={12}>
@@ -722,7 +730,17 @@ export default function NewSale() {
                   disabled={isGeneratingBill}
                 />
               </Grid>
-               <Grid item xs={false} md={6} />
+              {/* Customer Name Added Here */}
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="Customer Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  fullWidth
+                  placeholder="Enter name (optional)"
+                  disabled={isGeneratingBill}
+                />
+              </Grid>
             </>
           )}
 

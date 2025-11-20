@@ -214,6 +214,16 @@ export default function InvoiceModal({ open, saleId, onClose }) {
     return sum + (amounts.totalDiscountAmount || 0);
   }, 0);
 
+  // Determine if tax columns should be shown
+  // Logic: Show columns if ANY item has tax > 0.
+  // If ALL items have tax == 0, hide the columns.
+  const hasTax = saleItems.some(item => {
+     const details = medicineDetails[item.medicine_id];
+     const cgst = details?.cgst ?? 0;
+     const sgst = details?.sgst ?? 0;
+     return cgst > 0 || sgst > 0;
+  });
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <style>{printStyles}</style>
@@ -257,6 +267,10 @@ export default function InvoiceModal({ open, saleId, onClose }) {
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', mb: 1 }}>
               <Box>
+                 <Typography variant="body2">
+                   <strong>Customer Name:</strong>{' '}
+                   {sale.customer_name && sale.customer_name !== 'Walk-in' ? sale.customer_name : 'Walk-in'}
+                 </Typography>
                 <Typography variant="body2">
                   <strong>Customer Phone:</strong>{' '}
                   {sale.customer_phone && sale.customer_phone !== '-' ? sale.customer_phone : 'N/A'}
@@ -280,9 +294,13 @@ export default function InvoiceModal({ open, saleId, onClose }) {
                     <TableCell align="right">Qty</TableCell>
                     <TableCell align="right">MRP</TableCell>
                     <TableCell align="right">Disc</TableCell>
-                    {/* CGST and SGST Columns */}
-                    <TableCell align="right">CGST%</TableCell>
-                    <TableCell align="right">SGST%</TableCell>
+                    {/* Conditionally Render Tax Columns */}
+                    {hasTax && (
+                        <>
+                            <TableCell align="right">CGST%</TableCell>
+                            <TableCell align="right">SGST%</TableCell>
+                        </>
+                    )}
                     <TableCell align="right">Amount</TableCell>
                   </TableRow>
                 </TableHead>
@@ -308,9 +326,15 @@ export default function InvoiceModal({ open, saleId, onClose }) {
                         <TableCell align="right">{item.quantity || 0}</TableCell>
                         <TableCell align="right">{amounts.unitMrpDisplay.toFixed(2)}</TableCell>
                         <TableCell align="right">{amounts.totalDiscountAmount.toFixed(2)}</TableCell>
-                        {/* CGST and SGST Values */}
-                        <TableCell align="right">{details?.cgst ?? 0}</TableCell>
-                        <TableCell align="right">{details?.sgst ?? 0}</TableCell>
+                        
+                         {/* Conditionally Render Tax Values */}
+                        {hasTax && (
+                            <>
+                                <TableCell align="right">{details?.cgst ?? 0}</TableCell>
+                                <TableCell align="right">{details?.sgst ?? 0}</TableCell>
+                            </>
+                        )}
+
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{amounts.finalSubtotal.toFixed(2)}</TableCell>
                       </TableRow>
                     );
