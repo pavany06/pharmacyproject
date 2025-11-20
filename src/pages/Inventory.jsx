@@ -318,6 +318,9 @@ export default function Inventory() {
           }} size="small">
             <TableHead sx={{ bgcolor: 'grey.100' }}>
               <TableRow>
+                {/* --- ADDED S.No Header --- */}
+                <TableCell sx={{ fontWeight: 'bold', width: '50px' }}>S.No</TableCell>
+
                 {/* --- Updated Headers --- */}
                 <TableCell sx={{ fontWeight: 'bold' }}>Product Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Shop Name</TableCell>
@@ -339,7 +342,8 @@ export default function Inventory() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredMedicines.map((medicine) => {
+              {/* Updated map to include index */}
+              {filteredMedicines.map((medicine, index) => {
                 const isExpiring = expiringMedicines.some(exp => exp.id === medicine.id);
                 const isLowStock = lowStockMedicines.some(low => low.id === medicine.id);
                 const unitsPerPackage = parseUnitsFromItemString(medicine.no_of_items) || 0;
@@ -351,6 +355,11 @@ export default function Inventory() {
                 // Return statement needs to be inside the map callback function
                 return (
                   <TableRow key={medicine.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                    {/* --- ADDED S.No Cell --- */}
+                    <TableCell>
+                      {index + 1}
+                    </TableCell>
+                    
                     <TableCell component="th" scope="row" sx={{ fontWeight: 'medium' }}>
                       {medicine.product_name}
                     </TableCell>

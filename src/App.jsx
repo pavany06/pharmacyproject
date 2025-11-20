@@ -3,8 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Inventory from './pages/Inventory';
-// import Customers from './pages/Customers'; // Removed
 import NewSale from './pages/NewSale';
+import History from './pages/History'; // Import the new History page
 
 function App() {
   return (
@@ -18,19 +18,19 @@ function App() {
           </ProtectedRoute>
         }
       />
-      {/* <Route
-        path="/customers" // Removed
-        element={
-          <ProtectedRoute>
-            <Customers />
-          </ProtectedRoute>
-        }
-      /> */}
       <Route
         path="/new-sale"
         element={
           <ProtectedRoute>
             <NewSale />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/history" // Added History Route
+        element={
+          <ProtectedRoute>
+            <History />
           </ProtectedRoute>
         }
       />

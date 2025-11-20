@@ -11,8 +11,8 @@ import {
 } from '@mui/material';
 import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import InventoryIcon from '@mui/icons-material/Inventory';
-// import PeopleIcon from '@mui/icons-material/People'; // Removed
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import HistoryIcon from '@mui/icons-material/History'; // Imported History Icon
 import LogoutIcon from '@mui/icons-material/Logout';
 
 export default function Layout({ children }) {
@@ -25,10 +25,11 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
+  // Updated navItems to include History
   const navItems = [
     { path: '/inventory', label: 'Inventory', icon: <InventoryIcon sx={{ mr: 1 }} /> },
-    // { path: '/customers', label: 'Customers', icon: <PeopleIcon sx={{ mr: 1 }} /> }, // Removed
     { path: '/new-sale', label: 'New Sale', icon: <ShoppingCartIcon sx={{ mr: 1 }} /> },
+    { path: '/history', label: 'History', icon: <HistoryIcon sx={{ mr: 1 }} /> }, // Added History button
   ];
 
   return (
@@ -53,6 +54,7 @@ export default function Layout({ children }) {
                     borderBottom: isActive ? '2px solid white' : 'none',
                     borderRadius: 0,
                     paddingBottom: '4px',
+                    mr: 1
                   }}
                   startIcon={item.icon}
                 >
