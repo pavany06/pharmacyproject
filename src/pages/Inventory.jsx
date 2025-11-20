@@ -1,5 +1,5 @@
 // src/pages/Inventory.jsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 // Corrected import path for supabase
 import { supabase } from '../lib/supabase.js';
 import {
@@ -23,7 +23,6 @@ import {
   ListItem,
   ListItemText,
   Collapse,
-  // TablePagination removed
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -87,7 +86,7 @@ export default function Inventory() {
   // State to toggle visibility of warnings
   const [showWarnings, setShowWarnings] = useState(false); 
 
-  // Optimize lookups using Sets (O(1) complexity vs O(N))
+  // Optimize lookups using Sets for performance
   const expiringIds = useMemo(() => new Set(expiringMedicines.map(m => m.id)), [expiringMedicines]);
   const lowStockIds = useMemo(() => new Set(lowStockMedicines.map(m => m.id)), [lowStockMedicines]);
 
@@ -120,11 +119,13 @@ export default function Inventory() {
     setLowStockMedicines(lowStock);
   };
 
-  const fetchMedicines = async () => {
+  // FIX: Wrap fetchMedicines in useCallback to fix lint warning
+  const fetchMedicines = useCallback(async () => {
     setLoading(true);
     setExpiringMedicines([]);
     setLowStockMedicines([]);
     
+    // Updated select to include cgst and sgst
     const { data, error } = await supabase
       .from('medicines')
       .select('*')
@@ -141,12 +142,11 @@ export default function Inventory() {
        setFilteredMedicines([]);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchMedicines();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchMedicines]);
 
   useEffect(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
@@ -290,6 +290,7 @@ export default function Inventory() {
         </Box>
       </Collapse>
 
+      {/* --- Inventory Table: Full View, No Wrap --- */}
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -301,47 +302,54 @@ export default function Inventory() {
           </Typography>
         ) : (
           <Table sx={{
-            width: '100%', 
+            // Use max-content to force table to be as wide as necessary to fit content on one line
+            minWidth: 'max-content', 
             '& .MuiTableCell-root': {
               border: '1px solid rgba(224, 224, 224, 1)',
-              padding: { xs: '4px 2px', sm: '8px 4px', md: '8px 8px' },
-              whiteSpace: 'normal', 
-              wordBreak: 'break-word', 
-              fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem' },
-              verticalAlign: 'top', 
-              lineHeight: 1.2
+              padding: '8px 12px',
+              whiteSpace: 'nowrap', // PREVENT WRAPPING
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             },
             '& .MuiTableCell-head': {
                 fontWeight: 'bold',
                 backgroundColor: 'grey.100',
-                whiteSpace: 'normal',
             }
           }} size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', width: '40px' }}>S.No</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', minWidth: '100px' }}>Product Name</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', minWidth: '80px' }}>Shop Name</TableCell>
+                {/* Expanded S.No */}
+                <TableCell sx={{ fontWeight: 'bold', width: '60px', minWidth: '60px' }}>S.No</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Product Name</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Shop Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Batch No</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', minWidth: '110px' }}>Expiry (MM/YYYY)</TableCell>
+                
+                {/* Expanded Expiry */}
+                <TableCell sx={{ fontWeight: 'bold', minWidth: '130px' }}>Expiry (MM/YYYY)</TableCell>
+                
                 <TableCell sx={{ fontWeight: 'bold' }}>Units/Pkg</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', minWidth: '90px' }}>Drug Type</TableCell>
+                
+                {/* Expanded Drug Type */}
+                <TableCell sx={{ fontWeight: 'bold', minWidth: '120px' }}>Drug Type</TableCell>
+                
                 <TableCell sx={{ fontWeight: 'bold' }}>Stock (Pkgs)</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Rem Units</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Total Units</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Purchase Rate (Pkg)</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Purch Disc (%)</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Actual Purch Cost (Pkg)</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>GST (%)</TableCell>
+                
+                {/* Updated Headers: CGST & SGST */}
+                <TableCell sx={{ fontWeight: 'bold' }}>CGST (%)</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>SGST (%)</TableCell>
+                
                 <TableCell sx={{ fontWeight: 'bold' }}>MRP (Pkg)</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Sell Disc (%)</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold', minWidth: '80px' }}>Actions</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredMedicines
-                .map((medicine, index) => {
-                // Optimized lookup using Sets
+              {filteredMedicines.map((medicine, index) => {
                 const isExpiring = expiringIds.has(medicine.id);
                 const isLowStock = lowStockIds.has(medicine.id);
                 
@@ -390,9 +398,17 @@ export default function Inventory() {
                     <TableCell sx={{ fontWeight: 'medium' }}>
                       {typeof actualPurchaseCost === 'number' ? `₹${actualPurchaseCost.toFixed(2)}` : '-'}
                     </TableCell>
+                    
+                    {/* CGST Column */}
                     <TableCell>
-                      {typeof medicine.gst === 'number' ? `${medicine.gst.toFixed(2)}%` : '-'}
+                      {typeof medicine.cgst === 'number' ? `${medicine.cgst.toFixed(2)}%` : '-'}
                     </TableCell>
+                    
+                    {/* SGST Column */}
+                    <TableCell>
+                      {typeof medicine.sgst === 'number' ? `${medicine.sgst.toFixed(2)}%` : '-'}
+                    </TableCell>
+
                     <TableCell>
                       {typeof medicine.mrp === 'number' ? `₹${medicine.mrp.toFixed(2)}` : '-'}
                     </TableCell>
@@ -402,10 +418,10 @@ export default function Inventory() {
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
                         <IconButton size="small" color="primary" onClick={() => handleEdit(medicine)} sx={{ padding: 0.5 }}>
-                          <EditIcon fontSize="inherit"/>
+                          <EditIcon fontSize="small"/>
                         </IconButton>
                         <IconButton size="small" color="error" onClick={() => handleDelete(medicine.id)} sx={{ padding: 0.5 }}>
-                          <DeleteIcon fontSize="inherit"/>
+                          <DeleteIcon fontSize="small"/>
                         </IconButton>
                       </Box>
                     </TableCell>
