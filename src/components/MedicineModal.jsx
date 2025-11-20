@@ -237,8 +237,17 @@ export default function MedicineModal({ open, medicine, onClose }) {
     }
   };
 
+  // Custom onClose handler to prevent closing on backdrop click
+  const handleDialogClose = (event, reason) => {
+    if (reason && reason === "backdropClick") 
+        return;
+    if (!loading) {
+        onClose();
+    }
+  }
+
   return (
-    <Dialog open={open} onClose={() => !loading && onClose()} maxWidth="md" fullWidth> {/* Prevent close while loading */}
+    <Dialog open={open} onClose={handleDialogClose} maxWidth="md" fullWidth> {/* Prevent close while loading and on backdrop click */}
       <DialogTitle>
         {medicine ? 'Edit Medicine' : 'Add New Medicine'}
       </DialogTitle>
